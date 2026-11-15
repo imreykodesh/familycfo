@@ -47,7 +47,7 @@ linux:
   synopsis: Local-first household finances for Israeli families
 publish:
   provider: github
-  owner: nmazuz
+  owner: imreykodesh
   repo: familycfo
   # .github/workflows/desktop.yml uploads to a draft: publish it on GitHub to release it (and start auto-updates)
   releaseType: draft
