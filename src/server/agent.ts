@@ -1,22 +1,41 @@
-import { spawn } from 'child_process';
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
+import { randomUUID } from 'crypto';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import type { FastifyInstance } from 'fastify';
 import type { DB } from '../db/connection.js';
-import { cycleStartDay, today } from '../analytics/common.js';
+import { cycleStartDay, getSetting, today } from '../analytics/common.js';
 import { POLICIES_DIR, REPORTS_DIR } from './routes/insurance.js';
 import { APP_DIR, IN_DESKTOP, dataPath } from '../paths.js';
 
 /**
- * The data chat: each message runs the user's own Claude Code (`claude -p`, their subscription) with
- * no built-in tools — only the read-only `household` MCP server (src/agent/mcp.ts) — and streams the
- * answer back as server-sent events. A conversation continues with `--resume <sessionId>`.
+ * The data chat: each message runs one of the user's own AI command-line tools — Claude Code (`claude -p`),
+ * Gemini CLI (`gemini`) or Kiro CLI (`kiro-cli chat`), chosen in Settings — with none of their built-in tools,
+ * only the read-only `household` MCP server (src/agent/mcp.ts), and streams the answer back as server-sent events.
+ *
+ * - Claude also gets Read, limited by a hook to a copy of the insurance documents / reports (docs/), and the skills.
+ * - Gemini and Kiro get the MCP tools only (no file access at all), so they can't open the documents themselves.
+ *
+ * A conversation continues with the provider's own resume: Claude / Gemini by their session id, Kiro by running in a
+ * folder of its own per conversation (`--resume` continues the last conversation of that folder).
  */
+
+export const AGENT_PROVIDERS = ['claude', 'gemini', 'kiro'] as const;
+export type AgentProvider = typeof AGENT_PROVIDERS[number];
+
+const PROVIDER_NAMES: Record<AgentProvider, string> = { claude: 'Claude Code (claude)', gemini: 'Gemini CLI (gemini)', kiro: 'Kiro CLI (kiro-cli)' };
+
+export function agentProvider(db: DB): AgentProvider {
+  const p = process.env.AGENT_PROVIDER ?? getSetting(db, 'agent_provider', 'claude');
+  return (AGENT_PROVIDERS as readonly string[]).includes(p) ? p as AgentProvider : 'claude';
+}
 
 const AGENT_DIR = join(APP_DIR, 'agent');
 // outside the repo, so the project's files, settings and CLAUDE.md aren't part of the agent's context
 const WORKDIR = join(tmpdir(), 'household-agent');
+const GEMINI_DIR = join(tmpdir(), 'household-agent-gemini');
+const KIRO_DIR = join(tmpdir(), 'household-agent-kiro');
 
 function schemaText(db: DB): string {
   const tables = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name NOT IN ('sqlite_sequence', 'schema_version')
@@ -24,19 +43,40 @@ function schemaText(db: DB): string {
   return tables.join(';\n');
 }
 
+const TOOLS_TEXT: Record<AgentProvider, string> = {
+  claude: `Your only tools are the read-only household tools (api, sql), Skill, and Read for the documents in ./docs/: insurance policies
+(./docs/policies, paths from api /insurance) and imported pension / insurance reports (./docs/reports, the file from api /pension).`,
+  gemini: `Your only tools are the read-only household tools (api, sql) and activate_skill for the skills listed to you.
+You can't open files: the insurance documents and imported reports aren't available in this setup. For a coverage question, answer
+from the policy fields in api /insurance, say that the document itself wasn't read, and suggest the Claude option in Settings for it.`,
+  kiro: `Your only tools are the read-only household tools (api, sql). The skills below are guides for recurring kinds of questions.
+You can't open files: the insurance documents and imported reports aren't available in this setup. For a coverage question, answer
+from the policy fields in api /insurance, say that the document itself wasn't read, and suggest the Claude option in Settings for it.`,
+};
+
 /** Only what changes: the standing instructions and the skills live in agent/ (CLAUDE.md, .claude/skills). */
-function systemPrompt(db: DB): string {
+function systemPrompt(db: DB, provider: AgentProvider = 'claude'): string {
   const members = (db.prepare(`SELECT id, name FROM members ORDER BY id`).all() as { id: number; name: string }[])
     .map(m => `${m.id}=${m.name}`).join(', ');
-  return `You are the household data assistant of "הכספים של הבית". Follow the instructions in CLAUDE.md and use a skill when the question fits one.
-Your only tools are the read-only household tools (api, sql), Skill, and Read for the documents in ./docs/: insurance policies
-(./docs/policies, paths from api /insurance) and imported pension / insurance reports (./docs/reports, the file from api /pension).
+  const instructions = provider === 'claude' ? 'Follow the instructions in CLAUDE.md and use a skill when the question fits one.'
+    : 'Follow the standing instructions below and use a skill when the question fits one.';
+  return `You are the household data assistant of "הכספים של הבית". ${instructions}
+${TOOLS_TEXT[provider]}
 
 Today is ${today()}. A month ("cycle", key YYYY-MM) starts on day ${cycleStartDay(db)} of the month. Members: ${members}.
 
 Database schema (bank.db):
 ${schemaText(db)}`;
 }
+
+/** Claude reads agent/CLAUDE.md by itself; the others get it in their prompt (without the Read-only parts that don't apply). */
+function standingInstructions(): string {
+  return readFileSync(join(AGENT_DIR, 'CLAUDE.md'), 'utf8')
+    .replace(/^- `Read` — [\s\S]*?(?=\n\n|\n## )/m, '- Documents (insurance PDFs, reports) can\'t be opened in this setup — see above.');
+}
+
+const SKILLS_DIR = join(AGENT_DIR, '.claude', 'skills');
+const skillNames = () => (existsSync(SKILLS_DIR) ? readdirSync(SKILLS_DIR, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name) : []);
 
 /**
  * Prepare the work dir (outside the repo, so the developer CLAUDE.md isn't loaded): agent/'s instructions
@@ -65,6 +105,27 @@ function syncAgentFiles(): void {
   }, null, 2));
 }
 
+/** The port this server actually listens on (the desktop app may pick a free one); set on each chat request. */
+let apiPort = Number(process.env.PORT ?? 4310);
+
+/** The read-only MCP server: from source with tsx, or (desktop app) the bundled build/desktop/mcp.mjs run by Electron's Node. */
+function mcpCommand(): { command: string; args: string[] } {
+  if (process.env.HOUSEHOLD_MCP_SCRIPT) return { command: process.execPath, args: [process.env.HOUSEHOLD_MCP_SCRIPT] };
+  return { command: join(APP_DIR, 'node_modules', '.bin', 'tsx'), args: [join(APP_DIR, 'src', 'agent', 'mcp.ts')] };
+}
+
+/** The read-only household MCP server, as every provider's config spells it. */
+function householdServer() {
+  return {
+    ...mcpCommand(),
+    env: {
+      ...(IN_DESKTOP ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
+      BANK_DB: process.env.BANK_DB || dataPath('bank.db'),
+      HOUSEHOLD_API: `http://127.0.0.1:${apiPort}`,
+    },
+  };
+}
+
 function claudeEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
   // use the user's Claude subscription login, not an API key that may be set for other tools
@@ -77,89 +138,231 @@ function claudeEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-/** The read-only MCP server: from source with tsx, or (desktop app) the bundled build/desktop/mcp.mjs run by Electron's Node. */
-function mcpCommand(): { command: string; args: string[] } {
-  if (process.env.HOUSEHOLD_MCP_SCRIPT) return { command: process.execPath, args: [process.env.HOUSEHOLD_MCP_SCRIPT] };
-  return { command: join(APP_DIR, 'node_modules', '.bin', 'tsx'), args: [join(APP_DIR, 'src', 'agent', 'mcp.ts')] };
+/** API errors arrive as JSON nested in strings ("[API Error: {\"error\":{\"message\":\"{\\n \\\"error\\\"…") — keep the innermost message. */
+function readableError(raw: string): string {
+  const unescaped = raw.replace(/\\+"/g, '"').replace(/\\+n/g, ' ');
+  const messages = [...unescaped.matchAll(/"message":\s*"([^"{}]+)"/g)].map(m => m[1].trim()).filter(Boolean);
+  return (messages.at(-1) ?? raw).slice(0, 600);
 }
 
-export function agentRoutes(app: FastifyInstance, db: DB): void {
-  app.post('/api/agent/chat', async (req, reply) => {
-    // the port this server actually listens on (the desktop app may pick a free one)
-    const address = app.server.address();
-    const apiPort = typeof address === 'object' && address ? address.port : Number(process.env.PORT ?? 4310);
-    const { message, sessionId } = (req.body ?? {}) as { message?: string; sessionId?: string };
-    if (!message?.trim()) return reply.code(400).send({ error: 'message is required' });
-    if (sessionId && !/^[\w-]{8,64}$/.test(sessionId)) return reply.code(400).send({ error: 'bad sessionId' });
+// ---- one run: a child process whose stdout is turned into chat events ---------------------------
 
-    mkdirSync(WORKDIR, { recursive: true });
-    syncAgentFiles();
-    const mcpConfig = {
-      mcpServers: {
-        household: {
-          ...mcpCommand(),
-          env: {
-            ...(IN_DESKTOP ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
-            BANK_DB: process.env.BANK_DB || dataPath('bank.db'),
-            HOUSEHOLD_API: `http://127.0.0.1:${apiPort}`,
-          },
-        },
-      },
-    };
-    const args = [
-      '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-      // of the built-in tools only Skill (the skills in agent/) and Read — which the hook limits to the
-      // copied documents (docs/): no other files, no shell, no web
-      '--tools', 'Skill,Read',
-      // only the work dir's own settings (the Read guard) and skills, not the user's global ones
-      '--setting-sources', 'project',
-      '--strict-mcp-config', '--mcp-config', JSON.stringify(mcpConfig),
-      '--allowedTools', 'mcp__household__api,mcp__household__sql,Skill,Read(./docs/**)',
-      '--system-prompt', systemPrompt(db),
-      ...(sessionId ? ['--resume', sessionId] : []),
-    ];
-    const child = spawn(process.env.CLAUDE_PATH || 'claude', args, { cwd: WORKDIR, env: claudeEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
-    child.stdin.end(message);
+type Emit = (event: Record<string, unknown>) => void;
+interface Run {
+  child: ChildProcessWithoutNullStreams;
+  /** one stdout line (JSON-lines providers) or a raw chunk (text providers) → events; return true once the answer ended */
+  onOutput: (data: string, emit: Emit) => boolean;
+  lineMode: boolean;
+  /** what to report when the process exits before onOutput saw the end */
+  onClose?: (code: number | null, stderr: string, emit: Emit) => void;
+  /** a session id known before any output (Kiro: the conversation's folder) */
+  sessionId?: string;
+}
+
+function startClaude(db: DB, message: string, sessionId: string | undefined): Run {
+  mkdirSync(WORKDIR, { recursive: true });
+  syncAgentFiles();
+  const args = [
+    '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
+    // of the built-in tools only Skill (the skills in agent/) and Read — which the hook limits to the
+    // copied documents (docs/): no other files, no shell, no web
+    '--tools', 'Skill,Read',
+    // only the work dir's own settings (the Read guard) and skills, not the user's global ones
+    '--setting-sources', 'project',
+    '--strict-mcp-config', '--mcp-config', JSON.stringify({ mcpServers: { household: householdServer() } }),
+    '--allowedTools', 'mcp__household__api,mcp__household__sql,Skill,Read(./docs/**)',
+    '--system-prompt', systemPrompt(db, 'claude'),
+    ...(sessionId ? ['--resume', sessionId] : []),
+  ];
+  const child = spawn(process.env.CLAUDE_PATH || 'claude', args, { cwd: WORKDIR, env: claudeEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
+  child.stdin.end(message);
+  return {
+    child, lineMode: true,
+    onOutput(line, emit) {
+      let ev: Record<string, any>;
+      try { ev = JSON.parse(line); } catch { return false; }
+      if (ev.type === 'system' && ev.subtype === 'init') emit({ type: 'session', sessionId: ev.session_id });
+      else if (ev.type === 'stream_event' && ev.event?.type === 'content_block_delta' && ev.event.delta?.type === 'text_delta') {
+        emit({ type: 'text', text: ev.event.delta.text });
+      } else if (ev.type === 'stream_event' && ev.event?.type === 'content_block_start' && ev.event.content_block?.type === 'text') {
+        emit({ type: 'block' });
+      } else if (ev.type === 'assistant') {
+        for (const c of ev.message?.content ?? []) {
+          if (c.type === 'tool_use') emit({ type: 'tool', name: String(c.name).replace(/^mcp__household__/, ''), input: c.input });
+        }
+      } else if (ev.type === 'result') {
+        emit({ type: 'done', sessionId: ev.session_id, error: ev.is_error ? String(ev.result ?? ev.subtype) : null });
+        return true;
+      }
+      return false;
+    },
+  };
+}
+
+/**
+ * Gemini CLI headless (stream-json). The work dir's .gemini/settings.json allows no built-in tool except activate_skill
+ * (`tools.core`), only the household MCP server (trusted: no confirmation, which headless can't ask for), and the skills;
+ * GEMINI_SYSTEM_MD replaces Gemini's coding-agent system prompt with ours.
+ */
+function startGemini(db: DB, message: string, sessionId: string | undefined): Run {
+  rmSync(join(GEMINI_DIR, '.gemini'), { recursive: true, force: true });
+  mkdirSync(join(GEMINI_DIR, '.gemini'), { recursive: true });
+  cpSync(SKILLS_DIR, join(GEMINI_DIR, '.gemini', 'skills'), { recursive: true });
+  writeFileSync(join(GEMINI_DIR, '.gemini', 'settings.json'), JSON.stringify({
+    tools: { core: ['activate_skill'] },
+    mcp: { allowed: ['household'] },
+    mcpServers: { household: { ...householdServer(), trust: true, includeTools: ['api', 'sql'] } },
+  }, null, 2));
+  const systemFile = join(GEMINI_DIR, 'system.md');
+  writeFileSync(systemFile, `${systemPrompt(db, 'gemini')}\n\n${standingInstructions()}`);
+
+  const args = [
+    '--output-format', 'stream-json', '--allowed-mcp-server-names', 'household', '--extensions', 'none', '--skip-trust',
+    ...(sessionId ? ['--resume', sessionId] : []),
+  ];
+  const child = spawn('gemini', args, {
+    cwd: GEMINI_DIR, stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, GEMINI_SYSTEM_MD: systemFile, GEMINI_CLI_TRUST_WORKSPACE: 'true' },
+  });
+  // no prompt argument: in headless mode the question is read from stdin
+  child.stdin.end(message);
+  let session: string | undefined, lastWasTool = false;
+  const errors: string[] = [];
+  return {
+    child, lineMode: true,
+    onOutput(line, emit) {
+      let ev: Record<string, any>;
+      try { ev = JSON.parse(line); } catch { return false; }
+      if (ev.type === 'init' && ev.session_id) {
+        session = `gemini-${ev.session_id}`;
+        emit({ type: 'session', sessionId: session });
+      } else if (ev.type === 'message' && ev.role === 'assistant' && typeof ev.content === 'string') {
+        if (lastWasTool) emit({ type: 'block' });
+        lastWasTool = false;
+        emit({ type: 'text', text: ev.content });
+      } else if (ev.type === 'tool_use') {
+        lastWasTool = true;
+        const name = String(ev.tool_name ?? '').replace(/^(mcp_)?household_+/, '');
+        emit({ type: 'tool', name: name === 'activate_skill' ? 'Skill' : name, input: name === 'activate_skill' ? { skill: ev.parameters?.name } : ev.parameters });
+      } else if (ev.type === 'error' && ev.severity === 'error') {
+        errors.push(String(ev.message ?? ''));
+      } else if (ev.type === 'result') {
+        emit({ type: 'done', sessionId: session, error: ev.status === 'error' ? readableError(String(ev.error?.message || errors.join('\n') || 'error')) : null });
+        return true;
+      }
+      return false;
+    },
+  };
+}
+
+/**
+ * Kiro CLI headless (plain text). One folder per conversation, holding a `household` agent whose only tools are the
+ * household MCP server's (`tools: ["@household"]`, no mcp.json / powers), the standing instructions as its prompt and
+ * the skills as resources. `--resume` continues that folder's conversation.
+ */
+function startKiro(db: DB, message: string, sessionId: string | undefined): Run {
+  const given = sessionId?.replace(/^kiro-/, '');
+  // the id names a folder: only our own UUIDs
+  const id = given && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(given) ? given : randomUUID();
+  const dir = join(KIRO_DIR, id);
+  const resume = id === given && existsSync(join(dir, '.kiro'));
+  mkdirSync(join(dir, '.kiro', 'agents'), { recursive: true });
+  rmSync(join(dir, 'skills'), { recursive: true, force: true });
+  cpSync(SKILLS_DIR, join(dir, 'skills'), { recursive: true });
+  writeFileSync(join(dir, '.kiro', 'agents', 'household.json'), JSON.stringify({
+    name: 'household',
+    description: 'Read-only assistant for the household finance data',
+    prompt: `${systemPrompt(db, 'kiro')}\n\n${standingInstructions()}`,
+    mcpServers: { household: householdServer() },
+    tools: ['@household'],
+    includeMcpJson: false,
+    includePowers: false,
+    permissions: { rules: [{ capability: 'mcp', match: ['household/*'], effect: 'allow' }] },
+    resources: skillNames().map(s => `file://${join(dir, 'skills', s, 'SKILL.md')}`),
+  }, null, 2));
+
+  const args = ['chat', '--v3', '--no-interactive', '--agent', 'household', '--trust-tools=@household', '--require-mcp-startup',
+    '--wrap', 'never', ...(resume ? ['--resume'] : [])];
+  const child = spawn('kiro-cli', args, { cwd: dir, env: { ...process.env, NO_COLOR: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  child.stdin.end(message);
+  // eslint-disable-next-line no-control-regex
+  const ansi = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07/g;
+  return {
+    child, lineMode: false, sessionId: `kiro-${id}`,
+    onOutput(chunk, emit) {
+      const text = chunk.replace(ansi, '').replace(/\r/g, '');
+      if (text) emit({ type: 'text', text });
+      return false;
+    },
+    onClose(code, stderr, emit) {
+      const clean = stderr.replace(ansi, '').trim();
+      emit({ type: 'done', sessionId: `kiro-${id}`, error: code === 0 ? null : clean.slice(-600) || `kiro-cli exited with code ${code}` });
+    },
+  };
+}
+
+const STARTERS: Record<AgentProvider, (db: DB, message: string, sessionId: string | undefined) => Run> = {
+  claude: startClaude, gemini: startGemini, kiro: startKiro,
+};
+
+/** Which provider a session id belongs to (Claude's ids carry no prefix). */
+const providerOfSession = (id: string): AgentProvider => (id.startsWith('gemini-') ? 'gemini' : id.startsWith('kiro-') ? 'kiro' : 'claude');
+
+export function agentRoutes(app: FastifyInstance, db: DB): void {
+  app.get('/api/agent', async () => ({ provider: agentProvider(db), providers: AGENT_PROVIDERS }));
+
+  app.post('/api/agent/chat', async (req, reply) => {
+    const address = app.server.address();
+    if (typeof address === 'object' && address) apiPort = address.port;
+    const { message, sessionId: requested } = (req.body ?? {}) as { message?: string; sessionId?: string };
+    if (!message?.trim()) return reply.code(400).send({ error: 'message is required' });
+    if (requested && !/^[\w-]{8,80}$/.test(requested)) return reply.code(400).send({ error: 'bad sessionId' });
+
+    const provider = agentProvider(db);
+    // a conversation started with another provider can't be continued here — start a new one
+    const sessionId = requested && providerOfSession(requested) === provider
+      ? (provider === 'gemini' ? requested.replace(/^gemini-/, '') : requested) : undefined;
+
+    let run: Run;
+    try {
+      run = STARTERS[provider](db, message, sessionId);
+    } catch (err) {
+      return reply.code(500).send({ error: `could not prepare the ${PROVIDER_NAMES[provider]} chat: ${(err as Error).message}` });
+    }
+    const { child } = run;
 
     reply.hijack();
     reply.raw.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', connection: 'keep-alive' });
-    const emit = (event: object) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+    const emit: Emit = event => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+    if (run.sessionId) emit({ type: 'session', sessionId: run.sessionId });
     // the browser went away (closed the drawer, new chat) — stop the agent
     reply.raw.on('close', () => { if (child.exitCode == null) child.kill('SIGTERM'); });
 
     let buffer = '', stderr = '', finished = false;
     child.stdout.on('data', (chunk: Buffer) => {
+      if (finished) return;
+      if (!run.lineMode) { finished = run.onOutput(chunk.toString('utf8'), emit); return; }
       buffer += chunk.toString('utf8');
       let nl: number;
       while ((nl = buffer.indexOf('\n')) >= 0) {
         const line = buffer.slice(0, nl).trim();
         buffer = buffer.slice(nl + 1);
-        if (!line) continue;
-        let ev: Record<string, any>;
-        try { ev = JSON.parse(line); } catch { continue; }
-        if (ev.type === 'system' && ev.subtype === 'init') emit({ type: 'session', sessionId: ev.session_id });
-        else if (ev.type === 'stream_event' && ev.event?.type === 'content_block_delta' && ev.event.delta?.type === 'text_delta') {
-          emit({ type: 'text', text: ev.event.delta.text });
-        } else if (ev.type === 'stream_event' && ev.event?.type === 'content_block_start' && ev.event.content_block?.type === 'text') {
-          emit({ type: 'block' });
-        } else if (ev.type === 'assistant') {
-          for (const c of ev.message?.content ?? []) {
-            if (c.type === 'tool_use') emit({ type: 'tool', name: String(c.name).replace(/^mcp__household__/, ''), input: c.input });
-          }
-        } else if (ev.type === 'result') {
-          finished = true;
-          emit({ type: 'done', sessionId: ev.session_id, error: ev.is_error ? String(ev.result ?? ev.subtype) : null });
-        }
+        if (line && run.onOutput(line, emit)) { finished = true; break; }
       }
     });
     child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8'); });
     child.on('error', err => {
-      emit({ type: 'done', error: (err as NodeJS.ErrnoException).code === 'ENOENT' ? 'Claude Code (claude) is not installed or not on PATH — install it and sign in (claude), then restart the app' : err.message });
+      if (finished) return;
+      emit({ type: 'done', error: (err as NodeJS.ErrnoException).code === 'ENOENT' ? `${PROVIDER_NAMES[provider]} is not installed or not on PATH — install it and sign in, then restart the app` : err.message });
       finished = true;
       reply.raw.end();
     });
     child.on('close', code => {
-      if (!finished) emit({ type: 'done', error: stderr.trim().slice(-600) || `claude exited with code ${code}` });
+      if (!finished) {
+        if (run.onClose) run.onClose(code, stderr, emit);
+        else emit({ type: 'done', error: stderr.trim().slice(-600) || `${PROVIDER_NAMES[provider]} exited with code ${code}` });
+        finished = true;
+      }
       reply.raw.end();
     });
   });

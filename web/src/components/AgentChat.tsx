@@ -1,11 +1,13 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dialog } from 'radix-ui';
 import { ArrowUp, Database, LoaderCircle, Mic, Plus, Sparkles, Square, X } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { api, type AgentProvider } from '../api';
 import { cn } from '@/lib/utils';
 
 /**
- * The data chat: a drawer that asks the user's own Claude Code (via POST /api/agent/chat, streamed)
- * questions about the household data. Text or push-to-talk (the browser's speech recognition, Hebrew).
+ * The data chat: a drawer that asks the user's own AI tool — Claude Code, Gemini CLI or Kiro CLI, chosen in Settings —
+ * (via POST /api/agent/chat, streamed) questions about the household data. Text or push-to-talk (the browser's speech recognition, Hebrew).
  */
 
 interface ChatMessage { role: 'user' | 'assistant'; text: string; tools: string[]; error?: string | null; pending?: boolean }
@@ -23,8 +25,9 @@ const SUGGESTIONS = [
 const SKILL_LABELS: Record<string, string> = {
   'monthly-review': 'סיכום חודש', 'subscriptions-audit': 'בדיקת מנויים', 'category-deep-dive': 'ניתוח קטגוריה', 'trip-cost': 'עלות טיול',
   'insurance-question': 'שאלה על פוליסה', 'insurance-review': 'סקירת ביטוחים',
-  'pension-review': 'סקירת פנסיה', 'portfolio-review': 'סקירת תיק השקעות',
+  'pension-review': 'סקירת פנסיה', 'portfolio-review': 'סקירת תיק השקעות', 'scrape-problem': 'בעיית עדכון',
 };
+export const PROVIDER_LABELS: Record<AgentProvider, string> = { claude: 'Claude', gemini: 'Gemini', kiro: 'Kiro' };
 
 /** Open the chat from anywhere with a question — sent right away, or left in the box to finish. */
 export function askAgent(text: string, send = false) {
@@ -53,6 +56,7 @@ function toolLabel(name: string, input: Record<string, unknown> | undefined): st
     transactions: 'תנועות', installments: 'תשלומים', 'cards/upcoming': 'חיובי כרטיסים', forecast: 'תחזית', recurring: 'הוצאות קבועות',
     planned: 'הוצאות צפויות', networth: 'שווי נקי', recommendations: 'המלצות', alerts: 'התראות', categories: 'קטגוריות', meta: 'הגדרות',
     insurance: 'ביטוחים', pension: 'פנסיה וגמל', investments: 'תיק ההשקעות',
+    'sync-status': 'מצב העדכונים', 'scrape/runs': 'היסטוריית עדכונים', logs: 'קובץ היומן',
   };
   return labels[path] ?? path;
 }
@@ -120,6 +124,8 @@ const SpeechRecognition = (window as unknown as { SpeechRecognition?: new () => 
 export function AgentChat() {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<Saved>(load);
+  const agent = useQuery({ queryKey: ['agent'], queryFn: () => api.get<{ provider: AgentProvider }>('/agent'), staleTime: 60_000 });
+  const provider = PROVIDER_LABELS[agent.data?.provider ?? 'claude'];
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
@@ -251,7 +257,7 @@ export function AgentChat() {
             <span className="icon-tile h-8 w-8 rounded-lg [&_svg]:h-4 [&_svg]:w-4"><Sparkles /></span>
             <div className="min-w-0 flex-1">
               <Dialog.Title className="text-sm font-semibold">שאל על הנתונים</Dialog.Title>
-              <div className="text-xs text-muted-foreground">Claude · גישת קריאה בלבד לנתוני הבית</div>
+              <div className="text-xs text-muted-foreground">{provider} · גישת קריאה בלבד לנתוני הבית</div>
             </div>
             {!empty && <button type="button" className="btn-ghost btn-icon" onClick={newChat} aria-label="שיחה חדשה" title="שיחה חדשה"><Plus /></button>}
             <Dialog.Close className="btn-ghost btn-icon" aria-label="סגור"><X /></Dialog.Close>

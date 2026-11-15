@@ -5,6 +5,7 @@ import { runPipeline } from '../pipeline.js';
 import { loadConfig } from '../config.js';
 import { emitAppEvent } from './appEvents.js';
 import { findBrowser, NO_BROWSER } from '../browser.js';
+import { explainScrapeError, type ScrapeErrorExplanation } from '../scrapeErrors.js';
 
 /**
  * One scrape at a time, started from the UI: all banks, then the pipeline. The bank's OTP screen
@@ -16,6 +17,8 @@ export interface ScrapeCompanyState {
   status: 'pending' | 'running' | 'done' | 'failed';
   newTransactions: number;
   error: string | null;
+  /** a failed company: what probably happened and what to do */
+  explanation?: ScrapeErrorExplanation;
 }
 export interface ScrapeJobState {
   /** check = the desktop app checks a login it just saved: log in only, nothing saved */
@@ -86,7 +89,8 @@ export async function startScrape(db: DB, opts: StartOptions = {}): Promise<Scra
           if (state.otp?.company === event.company) clearOtp();
           setCompany(event.company, event.success
             ? { status: 'done', newTransactions: event.newTransactions }
-            : { status: 'failed', error: event.errorMessage || event.errorType || 'error' });
+            : { status: 'failed', error: event.errorMessage || event.errorType || 'error',
+                explanation: explainScrapeError(event.errorType, event.errorMessage) });
         }
       },
     }, { checkOnly: opts.checkOnly });

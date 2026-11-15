@@ -5,7 +5,7 @@ import { transactionRoutes } from './routes/transactions.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { eventRoutes } from './routes/events.js';
 import { categoryRoutes } from './routes/categories.js';
-import { agentRoutes } from './agent.js';
+import { AGENT_PROVIDERS, agentRoutes } from './agent.js';
 import { insuranceRoutes } from './routes/insurance.js';
 import { pensionRoutes } from './routes/pension.js';
 import { investmentRoutes } from './routes/investments.js';
@@ -13,6 +13,8 @@ import { setRate } from '../analytics/fx.js';
 
 import { localOnly, serveWeb } from './web.js';
 import { emitAppEvent } from './appEvents.js';
+import { MAX_MONTHS_BACK } from '../scraper.js';
+import { installFileLog, serverLogStream } from '../log.js';
 
 // Local-only: this API exposes the household's full financial data and has no login
 const HOST = '127.0.0.1';
@@ -25,7 +27,7 @@ export interface ServerOptions {
 }
 
 export function buildApp(db: DB, opts: Pick<ServerOptions, 'webDist'> = {}): FastifyInstance {
-  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'warn' } });
+  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'warn', stream: serverLogStream } });
   localOnly(app);
 
   registerCrud(app, db, { table: 'members', path: 'members', columns: ['name', 'color'], allowDelete: false });
@@ -65,11 +67,18 @@ export function buildApp(db: DB, opts: Pick<ServerOptions, 'webDist'> = {}): Fas
 
   app.put('/api/settings', async (req, reply) => {
     const body = req.body as Record<string, string | number>;
-    const allowed = ['cycle_start_day', 'balance_buffer', 'category_api_url',
+    const allowed = ['cycle_start_day', 'balance_buffer', 'category_api_url', 'scrape_months_back', 'agent_provider',
       // the desktop app: daily scrape and notifications
       'scrape_time', 'scrape_catch_up', 'notify_scrape', 'notify_alerts', 'onboarding_done'];
     if (body.scrape_time != null && !/^(([01]?\d|2[0-3]):[0-5]\d)?$/.test(String(body.scrape_time))) {
       return reply.code(400).send({ error: 'scrape_time must be HH:MM' });
+    }
+    if (body.agent_provider != null && !(AGENT_PROVIDERS as readonly string[]).includes(String(body.agent_provider))) {
+      return reply.code(400).send({ error: `agent_provider must be one of ${AGENT_PROVIDERS.join(', ')}` });
+    }
+    const months = body.scrape_months_back;
+    if (months != null && !(Number.isInteger(Number(months)) && Number(months) >= 1 && Number(months) <= MAX_MONTHS_BACK)) {
+      return reply.code(400).send({ error: `מספר החודשים לעדכון צריך להיות בין 1 ל-${MAX_MONTHS_BACK}` });
     }
     const upsert = db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`);
     const changed = Object.keys(body).filter(k => allowed.includes(k));
@@ -108,6 +117,7 @@ export function buildApp(db: DB, opts: Pick<ServerOptions, 'webDist'> = {}): Fas
 
 /** Start the API (and, with webDist, the UI) on 127.0.0.1. Resolves with the app and the port it listens on. */
 export async function startServer(opts: ServerOptions = {}): Promise<{ app: FastifyInstance; port: number }> {
+  installFileLog('server');
   const app = buildApp(getDb(), opts);
   await app.listen({ host: HOST, port: opts.port ?? Number(process.env.PORT ?? 4310) });
   const address = app.server.address();

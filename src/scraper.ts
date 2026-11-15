@@ -114,17 +114,39 @@ export interface ScrapeSummary {
   errorType?: string;
 }
 
+export const DEFAULT_MONTHS_BACK = 3;
+export const MAX_MONTHS_BACK = 24;
+
+/** Months of history a scrape fetches: SCRAPE_MONTHS env, else the `scrape_months_back` setting, else 3 (1–24). */
+export function scrapeMonthsBack(db: DB): number {
+  const raw = process.env.SCRAPE_MONTHS
+    ?? (db.prepare(`SELECT value FROM settings WHERE key = 'scrape_months_back'`).pluck().get() as string | undefined);
+  const n = Math.round(Number(raw));
+  return raw != null && Number.isFinite(n) && n >= 1 ? Math.min(n, MAX_MONTHS_BACK) : DEFAULT_MONTHS_BACK;
+}
+
+/** SCRAPE_FROM=2026-01-01 fetches from that date (backfill); otherwise `scrapeMonthsBack` months back. */
+export function scrapeStartDate(db: DB, now = new Date()): Date {
+  if (process.env.SCRAPE_FROM) {
+    const from = new Date(`${process.env.SCRAPE_FROM}T00:00:00`);
+    if (Number.isNaN(from.getTime())) throw new Error(`SCRAPE_FROM is not a date: ${process.env.SCRAPE_FROM}`);
+    return from;
+  }
+  const start = new Date(now);
+  start.setMonth(start.getMonth() - scrapeMonthsBack(db));
+  return start;
+}
+
 export interface ScrapeOptions {
   /** only log in and read a few days, to check the login: nothing is saved */
   checkOnly?: boolean;
 }
 
 export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeHooks = {}, opts: ScrapeOptions = {}): Promise<ScrapeSummary[]> {
-  // SCRAPE_FROM=2026-01-01 fetches from that date (backfill); otherwise the last 3 months
-  const startDate = process.env.SCRAPE_FROM && !opts.checkOnly ? new Date(`${process.env.SCRAPE_FROM}T00:00:00`) : new Date();
-  if (Number.isNaN(startDate.getTime())) throw new Error(`SCRAPE_FROM is not a date: ${process.env.SCRAPE_FROM}`);
-  if (opts.checkOnly) startDate.setDate(startDate.getDate() - 7);
-  else if (!process.env.SCRAPE_FROM) startDate.setMonth(startDate.getMonth() - 3);
+  // a login check reads only the last 7 days
+  const startDate = opts.checkOnly ? new Date(Date.now() - 7 * 86_400_000) : scrapeStartDate(db);
+  const startDay = startDate.toISOString().slice(0, 10);
+  console.log(`Scraping from ${startDay}`);
 
   // SCRAPE_ONLY=visaCal,leumi limits the run to those companies
   const only = process.env.SCRAPE_ONLY?.split(',').map(s => s.trim()).filter(Boolean);
@@ -228,8 +250,8 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
       if (!result.success) {
         console.error(`Failed to scrape ${account.companyId}:`, result.errorType, result.errorMessage);
         if (pageStateAtClose) console.error(pageStateAtClose);
-        if (!opts.checkOnly) recordScrapeRun(db, { company: account.companyId, startedAt, success: false,
-          errorType: result.errorType, errorMessage: result.errorMessage });
+        if (!opts.checkOnly) recordScrapeRun(db, { company: account.companyId, startedAt, success: false, startDate: startDay,
+          errorType: result.errorType, errorMessage: result.errorMessage, pageState: pageStateAtClose });
         summaries.push({ company: account.companyId, success: false, newTransactionIds: [], errorType: result.errorType });
         hooks.onProgress?.({ type: 'done', company: account.companyId, success: false, newTransactions: 0,
           errorType: result.errorType, errorMessage: result.errorMessage });
@@ -249,13 +271,13 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
         const label = acc.savingsAccount ? ' (savings deposit)' : '';
         console.log(`  ${saved.accountId}${label}: balance ${acc.balance ?? '-'} ${acc.currency ?? 'ILS'}, ${saved.insertedIds.length} new, ${saved.updated} updated`);
       }
-      recordScrapeRun(db, { company: account.companyId, startedAt, success: true, newTransactions: newIds.length });
+      recordScrapeRun(db, { company: account.companyId, startedAt, success: true, newTransactions: newIds.length, startDate: startDay });
       summaries.push({ company: account.companyId, success: true, newTransactionIds: newIds });
       hooks.onProgress?.({ type: 'done', company: account.companyId, success: true, newTransactions: newIds.length });
     } catch (err) {
       console.error(`Error scraping ${account.companyId}:`, err);
-      if (!opts.checkOnly) recordScrapeRun(db, { company: account.companyId, startedAt, success: false,
-        errorType: 'EXCEPTION', errorMessage: String(err) });
+      if (!opts.checkOnly) recordScrapeRun(db, { company: account.companyId, startedAt, success: false, startDate: startDay,
+        errorType: 'EXCEPTION', errorMessage: err instanceof Error && err.stack ? err.stack.slice(0, 2000) : String(err), pageState: pageStateAtClose });
       summaries.push({ company: account.companyId, success: false, newTransactionIds: [], errorType: 'EXCEPTION' });
       hooks.onProgress?.({ type: 'done', company: account.companyId, success: false, newTransactions: 0,
         errorType: 'EXCEPTION', errorMessage: err instanceof Error ? err.message : String(err) });

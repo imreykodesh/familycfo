@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CalendarDays, ChevronDown, ChevronUp, CreditCard, EyeOff, Hash, Inbox,
+  ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CalendarDays, ChevronDown, ChevronUp, CreditCard, Download, EyeOff, Hash, Inbox,
   MoreHorizontal, PenLine, PieChart, PiggyBank, Plus, Receipt, Scale, ShoppingBag, TrendingUp, Undo2, X,
 } from 'lucide-react';
 import { api, qs, type Tx } from '../api';
@@ -154,6 +154,8 @@ export default function Transactions() {
         subtitle={data ? <>{data.total} תנועות{cycle && !review ? ` · ${monthName(cycle)}` : ''}</> : undefined}
         actions={<>
           <button className="btn" onClick={() => setShowCategories(true)} disabled={!data}><PieChart />פירוט לפי קטגוריות</button>
+          {/* the same filters as the list, without its row limit */}
+          <a className="btn" href={`/api/transactions/export.csv${qs({ ...query, limit: undefined })}`} download><Download />ייצוא ל-CSV</a>
           <button className="btn btn-primary" onClick={() => setManual('new')}><Plus />הוספת הוצאה</button>
         </>} />
 

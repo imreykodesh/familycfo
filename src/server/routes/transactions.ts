@@ -4,6 +4,7 @@ import { cycleByKey, cycleStartDay, filterTx, incomeOf, loadTransactions, mercha
 import { applyRules, deriveKinds } from '../../ingest/classify.js';
 import { localDate } from '../../ingest/normalize.js';
 import { pickColumns, toApi } from '../crud.js';
+import { sendCsv } from '../csv.js';
 import { MANUAL_ACCOUNT_ID } from '../../db/migrations.js';
 import { isOverdue, linkPlanned, listPlanned, matchPlanned, plannedCandidates, plannedPayments, unlinkPlanned, type PlannedItem } from '../../analytics/planned.js';
 
@@ -14,6 +15,10 @@ interface TxQuery {
   charge?: string;
   limit?: string; offset?: string;
 }
+
+const KIND_NAMES: Record<string, string> = {
+  expense: 'הוצאה', income: 'הכנסה', refund: 'זיכוי', transfer: 'העברה פנימית', card_payment: 'תשלום כרטיס', savings: 'הפקדה לחיסכון',
+};
 
 const EDITABLE = ['category_id', 'member_id', 'business_id', 'business_share_pct', 'kind', 'fixed_override', 'excluded', 'notes'];
 
@@ -34,8 +39,8 @@ function needsReview(t: Tx): boolean {
 }
 
 export function transactionRoutes(app: FastifyInstance, db: DB): void {
-  app.get('/api/transactions', async req => {
-    const q = req.query as TxQuery;
+  /** The rows of the transactions screen for a query (all of them, newest first) — shared by the list and the CSV export. */
+  const queryTransactions = (q: TxQuery) => {
     let from = q.from, to = q.to;
     if (q.cycle && !q.charge) ({ start: from, end: to } = cycleByKey(q.cycle, cycleStartDay(db)));
     let txs = filterTx(loadTransactions(db, { from, to, includeExcluded: true }), parseFilter(q));
@@ -44,11 +49,37 @@ export function transactionRoutes(app: FastifyInstance, db: DB): void {
     if (q.kind) txs = txs.filter(t => q.kind!.split(',').includes(t.kind));
     if (q.review === '1') txs = txs.filter(needsReview);
     txs.sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || b.id - a.id);
-    const offset = Number(q.offset ?? 0), limit = Math.min(Number(q.limit ?? 200), 2000);
     const accounts = new Map((db.prepare(`SELECT id, display_name FROM accounts`).all() as { id: string; display_name: string | null }[])
       .map(a => [a.id, a.display_name ?? a.id]));
     const excluded = new Set(db.prepare(`SELECT id FROM transactions WHERE excluded = 1`).pluck().all() as number[]);
     if (q.hideCardPayments === '1') txs = txs.filter(t => t.kind !== 'card_payment');
+    return { txs, accounts, excluded };
+  };
+
+  app.get('/api/transactions/export.csv', async (req, reply) => {
+    const q = req.query as TxQuery;
+    const { txs, accounts, excluded } = queryTransactions(q);
+    const names = (sql: string) => new Map((db.prepare(sql).all() as { id: number; name: string }[]).map(r => [r.id, r.name]));
+    const members = names(`SELECT id, name FROM members`);
+    const businesses = names(`SELECT id, name FROM businesses`);
+    const tags = names(`SELECT id, name FROM tags`);
+    const period = q.cycle && !q.charge ? q.cycle : [q.from, q.to].filter(Boolean).join('_') || 'הכל';
+    return sendCsv(reply, `תנועות-${period}.csv`,
+      ['תאריך', 'תאריך חיוב', 'תיאור', 'חשבון', 'קטגוריה', 'קטגוריית אב', 'סוג', 'בן בית', 'עסק', 'סכום (₪)', 'חלק משק הבית (₪)',
+        'חלק עסקי (₪)', 'תשלום', 'תגיות', 'הערות', 'מוסתר מהחישובים'],
+      txs.map(t => [
+        t.date, t.processedDate, t.description, accounts.get(t.accountId) ?? t.accountId, t.categoryName, t.categoryParentName,
+        KIND_NAMES[t.kind] ?? t.kind, members.get(t.memberId), t.businessId != null ? businesses.get(t.businessId) : null,
+        t.amount, t.personalAmount, t.businessAmount,
+        t.installmentNumber != null ? `${t.installmentNumber}/${t.installmentTotal ?? '?'}` : null,
+        t.tagIds.map(id => tags.get(id)).filter(Boolean).join(', '), t.notes, excluded.has(t.id) ? 'כן' : null,
+      ]), `transactions-${period === 'הכל' ? 'all' : period}.csv`);
+  });
+
+  app.get('/api/transactions', async req => {
+    const q = req.query as TxQuery;
+    const { txs, accounts, excluded } = queryTransactions(q);
+    const offset = Number(q.offset ?? 0), limit = Math.min(Number(q.limit ?? 200), 2000);
     // describe the other side of immediate-debit pairs ("ויזה" bank row ↔ the card purchase)
     const brief = new Map((db.prepare(`SELECT t.id, t.description, t.date, a.display_name FROM transactions t JOIN accounts a ON a.id = t.account_id
       WHERE t.id IN (SELECT matched_txn_id FROM transactions WHERE matched_txn_id IS NOT NULL)
