@@ -5,19 +5,22 @@ import { transactionRoutes } from './routes/transactions.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { eventRoutes } from './routes/events.js';
 import { categoryRoutes } from './routes/categories.js';
-import { agentRoutes } from './agent.js';
+import { AGENT_PROVIDERS, agentRoutes } from './agent.js';
 import { insuranceRoutes } from './routes/insurance.js';
 import { pensionRoutes } from './routes/pension.js';
 import { investmentRoutes } from './routes/investments.js';
 import { setRate } from '../analytics/fx.js';
 import { MAX_MONTHS_BACK } from '../scraper.js';
+import { installFileLog, serverLogStream } from '../log.js';
+
+installFileLog('server');
 
 const db = getDb();
 // Local-only: this API exposes the household's full financial data and has no login
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.PORT ?? 4310);
 
-const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'warn' } });
+const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'warn', stream: serverLogStream } });
 
 registerCrud(app, db, { table: 'members', path: 'members', columns: ['name', 'color'], allowDelete: false });
 registerCrud(app, db, {
@@ -56,7 +59,10 @@ app.get('/api/meta', async () => ({
 
 app.put('/api/settings', async (req, reply) => {
   const body = req.body as Record<string, string | number>;
-  const allowed = ['cycle_start_day', 'balance_buffer', 'scrape_months_back'];
+  const allowed = ['cycle_start_day', 'balance_buffer', 'scrape_months_back', 'agent_provider'];
+  if (body.agent_provider != null && !(AGENT_PROVIDERS as readonly string[]).includes(String(body.agent_provider))) {
+    return reply.code(400).send({ error: `agent_provider must be one of ${AGENT_PROVIDERS.join(', ')}` });
+  }
   const months = body.scrape_months_back;
   if (months != null && !(Number.isInteger(Number(months)) && Number(months) >= 1 && Number(months) <= MAX_MONTHS_BACK)) {
     return reply.code(400).send({ error: `מספר החודשים לעדכון צריך להיות בין 1 ל-${MAX_MONTHS_BACK}` });

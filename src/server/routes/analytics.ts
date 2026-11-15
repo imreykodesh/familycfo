@@ -15,6 +15,8 @@ import { toApi } from '../crud.js';
 import { monthPlan } from '../../analytics/commitments.js';
 import { parseFilter } from './transactions.js';
 import { sendCsv } from '../csv.js';
+import { explainScrapeError } from '../../scrapeErrors.js';
+import { LOG_DIR, readLogs, type LogLevel } from '../../log.js';
 
 type Q = Record<string, string | undefined>;
 
@@ -194,10 +196,36 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
     return { ok: true };
   });
 
+  const withExplanation = (r: Record<string, unknown>) => ({
+    ...toApi(r),
+    explanation: r.success ? null : explainScrapeError(r.error_type as string | null, r.error_message as string | null, r.page_state as string | null),
+  });
+
   app.get('/api/sync-status', async () => (db.prepare(`
-    SELECT r.company, r.started_at, r.finished_at, r.success, r.error_type, r.error_message, r.new_transactions,
-      (SELECT MAX(started_at) FROM scrape_runs WHERE company = r.company AND success = 1) AS last_success
+    SELECT r.company, r.started_at, r.finished_at, r.success, r.error_type, r.error_message, r.page_state, r.new_transactions,
+      (SELECT MAX(started_at) FROM scrape_runs WHERE company = r.company AND success = 1) AS last_success,
+      (SELECT COUNT(*) FROM scrape_runs f WHERE f.company = r.company AND f.success = 0
+         AND f.id > COALESCE((SELECT MAX(id) FROM scrape_runs WHERE company = r.company AND success = 1), 0)) AS failures_in_a_row
     FROM scrape_runs r WHERE r.id = (SELECT MAX(id) FROM scrape_runs WHERE company = r.company)
     ORDER BY r.company
-  `).all() as Record<string, unknown>[]).map(toApi));
+  `).all() as Record<string, unknown>[]).map(withExplanation));
+
+  // every run, newest first: when, what period, the result and — for a failure — what it probably means
+  app.get('/api/scrape/runs', async req => {
+    const q = req.query as { company?: string; failed?: string; limit?: string };
+    const limit = Math.min(Math.max(Number(q.limit ?? 100) || 100, 1), 1000);
+    const where = [q.company ? 'company = @company' : '', q.failed === '1' ? 'success = 0' : ''].filter(Boolean);
+    return (db.prepare(`
+      SELECT id, company, started_at, finished_at, success, error_type, error_message, page_state, new_transactions, start_date,
+        CAST(ROUND((julianday(finished_at) - julianday(started_at)) * 86400) AS INTEGER) AS duration_seconds
+      FROM scrape_runs ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT @limit
+    `).all({ company: q.company ?? null, limit }) as Record<string, unknown>[]).map(withExplanation);
+  });
+
+  // the app's log files (data/logs): newest lines of the server and the scrapes
+  app.get('/api/logs', async req => {
+    const q = req.query as { days?: string; level?: string; search?: string; limit?: string };
+    const level = ['debug', 'info', 'warn', 'error'].includes(q.level ?? '') ? q.level as LogLevel : undefined;
+    return { dir: LOG_DIR, ...readLogs({ days: Number(q.days ?? 2) || 2, limit: Number(q.limit ?? 500) || 500, level, search: q.search }) };
+  });
 }

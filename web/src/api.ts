@@ -245,13 +245,24 @@ export interface InsuranceOverview {
 /** The scrape started from the UI (one at a time). */
 export interface ScrapeJob {
   status: 'idle' | 'running' | 'pipeline' | 'done' | 'failed'; startedAt: string | null; finishedAt: string | null;
-  companies: { company: string; status: 'pending' | 'running' | 'done' | 'failed'; newTransactions: number; error: string | null }[];
+  companies: { company: string; status: 'pending' | 'running' | 'done' | 'failed'; newTransactions: number; error: string | null; explanation?: ScrapeErrorExplanation }[];
   /** the bank is waiting for an OTP code */
   otp: { company: string; requestedAt: string } | null;
   newTransactions: number; error: string | null;
   /** last successful bank scrape (UTC, "YYYY-MM-DD HH:MM:SS") */
   lastSuccessAt: string | null;
 }
+/** A failed scrape in words (src/scrapeErrors.ts). */
+export interface ScrapeErrorExplanation { title: string; hint: string; kind: 'login' | 'site' | 'setup' | 'otp' | 'unknown'; retry: boolean }
+/** One company's last scrape (GET /sync-status). */
+export interface SyncStatus {
+  company: string; startedAt: string; finishedAt: string | null; success: number; errorType: string | null; errorMessage: string | null;
+  pageState: string | null; newTransactions: number; lastSuccess: string | null; failuresInARow: number; explanation: ScrapeErrorExplanation | null;
+}
+/** One scrape of one company (GET /scrape/runs). */
+export interface ScrapeRun extends Omit<SyncStatus, 'lastSuccess' | 'failuresInARow'> { id: number; startDate: string | null; durationSeconds: number | null }
+export interface LogLine { time: string; level: 'debug' | 'info' | 'warn' | 'error'; source: string; text: string }
+export type AgentProvider = 'claude' | 'gemini' | 'kiro';
 /** A one-off expense entered in advance, waiting for the card / bank to charge it. */
 export interface PlannedItem {
   id: number; description: string; amount: number; date: string; accountId: string; accountKind: string; installments: number;

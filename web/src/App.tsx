@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import {
   ArrowLeftRight, ChartColumn, Bell, Briefcase, CalendarCheck, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
-  ChartCandlestick, Settings2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
+  ChartCandlestick, ScrollText, Settings2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
 } from 'lucide-react';
 import { api, type Alert } from './api';
 import { useFilters, useMeta } from './state';
@@ -24,6 +24,7 @@ import Trends from './pages/Trends';
 import Insurance from './pages/Insurance';
 import Pension from './pages/Pension';
 import Investments from './pages/Investments';
+import Logs from './pages/Logs';
 import { Picker, Segmented } from './components/ui';
 import { AgentChat } from './components/AgentChat';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/kit/tooltip';
@@ -46,6 +47,7 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/loans', label: 'הלוואות ומשכנתא', icon: Home },
   { to: '/insurance', label: 'ביטוחים', icon: ShieldCheck },
   { to: '/categories', label: 'קטגוריות', icon: Layers },
+  { to: '/logs', label: 'יומן ותקלות', icon: ScrollText },
   { to: '/settings', label: 'הגדרות', icon: Settings2 },
 ];
 
@@ -263,6 +265,7 @@ export default function App() {
               <Route path="/savings" element={<Savings />} />
               <Route path="/loans" element={<Loans />} />
               <Route path="/categories" element={<Categories />} />
+              <Route path="/logs" element={<Logs />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </div>

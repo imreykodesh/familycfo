@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Circle, KeyRound, LoaderCircle, RefreshCw, X } from 'lucide-react';
 import { api, type ScrapeJob } from '../api';
@@ -10,7 +11,7 @@ const COMPANY_LABELS: Record<string, string> = {
   mercantile: 'מרכנתיל', otsarHahayal: 'אוצר החייל', yahav: 'יהב', massad: 'מסד', union: 'איגוד', oneZero: 'One Zero',
   isracard: 'ישראכרט', amex: 'אמריקן אקספרס', max: 'מקס', visaCal: 'כאל', behatsdaa: 'בהצדעה', beyahadBishvilha: 'ביחד בשבילך',
 };
-const companyName = (id: string) => COMPANY_LABELS[id] ?? id;
+export const companyName = (id: string) => COMPANY_LABELS[id] ?? id;
 
 const rtf = new Intl.RelativeTimeFormat('he', { numeric: 'auto' });
 function ago(utc: string): string {
@@ -106,7 +107,12 @@ export function ScrapeButton() {
                         : c.status === 'failed' ? 'נכשל' : 'בתור'}
                     </span>
                   </div>
-                  {c.error && <div className="mt-0.5 line-clamp-2 text-xs text-red-600" title={c.error} dir="auto">{c.error}</div>}
+                  {c.status === 'failed' && c.explanation ? (
+                    <div className="mt-0.5 space-y-0.5 text-xs">
+                      <div className="font-medium text-red-600">{c.explanation.title}</div>
+                      <div className="text-muted-foreground">{c.explanation.hint}</div>
+                    </div>
+                  ) : c.error && <div className="mt-0.5 line-clamp-2 text-xs text-red-600" title={c.error} dir="auto">{c.error}</div>}
                 </div>
               </li>
             ))}
@@ -116,6 +122,9 @@ export function ScrapeButton() {
               : data?.status === 'done' ? `הסתיים · נוספו ${data.newTransactions} תנועות חדשות`
               : data?.status === 'failed' ? (data.error ?? 'שגיאה')
               : running ? 'חלון דפדפן ייפתח לכל בנק — אפשר להמשיך לעבוד בינתיים' : null}
+            {!running && data?.companies.some(c => c.status === 'failed') && (
+              <Link to="/logs" className="ms-2 font-medium text-primary hover:underline" onClick={() => setOpen(false)}>ליומן ותקלות</Link>
+            )}
           </div>
         </PopoverContent>
       </Popover>

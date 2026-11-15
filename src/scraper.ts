@@ -161,6 +161,8 @@ export function scrapeStartDate(db: DB, now = new Date()): Date {
 
 export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeHooks = {}): Promise<ScrapeSummary[]> {
   const startDate = scrapeStartDate(db);
+  const startDay = startDate.toISOString().slice(0, 10);
+  console.log(`Scraping from ${startDay}`);
 
   // SCRAPE_ONLY=visaCal,leumi limits the run to those companies
   const only = process.env.SCRAPE_ONLY?.split(',').map(s => s.trim()).filter(Boolean);
@@ -262,8 +264,8 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
       if (!result.success) {
         console.error(`Failed to scrape ${account.companyId}:`, result.errorType, result.errorMessage);
         if (pageStateAtClose) console.error(pageStateAtClose);
-        recordScrapeRun(db, { company: account.companyId, startedAt, success: false,
-          errorType: result.errorType, errorMessage: result.errorMessage });
+        recordScrapeRun(db, { company: account.companyId, startedAt, success: false, startDate: startDay,
+          errorType: result.errorType, errorMessage: result.errorMessage, pageState: pageStateAtClose });
         summaries.push({ company: account.companyId, success: false, newTransactionIds: [], errorType: result.errorType });
         hooks.onProgress?.({ type: 'done', company: account.companyId, success: false, newTransactions: 0,
           errorType: result.errorType, errorMessage: result.errorMessage });
@@ -277,13 +279,13 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
         const label = acc.savingsAccount ? ' (savings deposit)' : '';
         console.log(`  ${saved.accountId}${label}: balance ${acc.balance ?? '-'} ${acc.currency ?? 'ILS'}, ${saved.insertedIds.length} new, ${saved.updated} updated`);
       }
-      recordScrapeRun(db, { company: account.companyId, startedAt, success: true, newTransactions: newIds.length });
+      recordScrapeRun(db, { company: account.companyId, startedAt, success: true, newTransactions: newIds.length, startDate: startDay });
       summaries.push({ company: account.companyId, success: true, newTransactionIds: newIds });
       hooks.onProgress?.({ type: 'done', company: account.companyId, success: true, newTransactions: newIds.length });
     } catch (err) {
       console.error(`Error scraping ${account.companyId}:`, err);
-      recordScrapeRun(db, { company: account.companyId, startedAt, success: false,
-        errorType: 'EXCEPTION', errorMessage: String(err) });
+      recordScrapeRun(db, { company: account.companyId, startedAt, success: false, startDate: startDay,
+        errorType: 'EXCEPTION', errorMessage: err instanceof Error && err.stack ? err.stack.slice(0, 2000) : String(err), pageState: pageStateAtClose });
       summaries.push({ company: account.companyId, success: false, newTransactionIds: [], errorType: 'EXCEPTION' });
       hooks.onProgress?.({ type: 'done', company: account.companyId, success: false, newTransactions: 0,
         errorType: 'EXCEPTION', errorMessage: err instanceof Error ? err.message : String(err) });

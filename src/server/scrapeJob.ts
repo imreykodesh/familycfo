@@ -3,6 +3,7 @@ import { scrapeAll } from '../scraper.js';
 import { runPipeline } from '../pipeline.js';
 // reads the bank credentials file; the credentials go only to the scraper and are never returned by the API
 import { loadConfig } from '../config.js';
+import { explainScrapeError, type ScrapeErrorExplanation } from '../scrapeErrors.js';
 
 /**
  * One scrape at a time, started from the UI: all banks, then the pipeline. The bank's OTP screen
@@ -14,6 +15,8 @@ export interface ScrapeCompanyState {
   status: 'pending' | 'running' | 'done' | 'failed';
   newTransactions: number;
   error: string | null;
+  /** a failed company: what probably happened and what to do */
+  explanation?: ScrapeErrorExplanation;
 }
 export interface ScrapeJobState {
   status: 'idle' | 'running' | 'pipeline' | 'done' | 'failed';
@@ -71,7 +74,8 @@ export function startScrape(db: DB): ScrapeJobState {
           if (state.otp?.company === event.company) clearOtp();
           setCompany(event.company, event.success
             ? { status: 'done', newTransactions: event.newTransactions }
-            : { status: 'failed', error: event.errorMessage || event.errorType || 'error' });
+            : { status: 'failed', error: event.errorMessage || event.errorType || 'error',
+                explanation: explainScrapeError(event.errorType, event.errorMessage) });
         }
       },
     });

@@ -3,6 +3,9 @@ import { scrapeAll, type Config } from './scraper.js';
 import { runPipeline } from './pipeline.js';
 import { getDb } from './db/connection.js';
 import { loadConfig } from './config.js';
+import { installFileLog } from './log.js';
+
+installFileLog('scrape');
 
 const config = loadConfig();
 
