@@ -122,14 +122,15 @@ accounts, two cards, a mortgage, savings and a small stock portfolio. Delete `de
    [israeli-bank-scrapers docs](https://github.com/eshaham/israeli-bank-scrapers#specific-definitions-per-scraper).
    Bank accounts and cards are told apart automatically.
 
-3. **First scrape** (fetches the last 3 months, plus upcoming card charges):
+3. **First scrape** (fetches the last 3 months by default, plus upcoming card charges; change it in Settings → "כמה חודשים אחורה לעדכן"):
 
    ```bash
    npm run scrape
    ```
 
    A Chrome window opens for each company (`SHOW_BROWSER=0` for headless). If Bank Hapoalim asks for an SMS code,
-   type it in the terminal. To fetch more history: `SCRAPE_FROM=2025-01-01 npm run scrape`.
+   type it in the terminal. To fetch more history: `SCRAPE_MONTHS=12 npm run scrape` or `SCRAPE_FROM=2025-01-01 npm run scrape`.
+   Some banks and card companies return less history than asked for.
 
 4. **Start the app:**
 
@@ -198,7 +199,8 @@ Both are idempotent — re-running updates, never duplicates. Policy documents c
 | `BANK_DB` | env | `bank.db` | Database file. Use a copy for experiments. |
 | `PORT` / `WEB_PORT` | env | `4310` / `5180` | API and web app ports (both bind to 127.0.0.1). |
 | `SCRAPE_ONLY` | env | all | `SCRAPE_ONLY=isracard,max` scrapes only these companies. |
-| `SCRAPE_FROM` | env | 3 months back | Start date of the scrape (`YYYY-MM-DD`), for backfilling. |
+| `SCRAPE_MONTHS` | env | the Settings value (3) | How many months back a scrape fetches (1–24). Overrides the "כמה חודשים אחורה לעדכן" setting. |
+| `SCRAPE_FROM` | env | 3 months back | Start date of the scrape (`YYYY-MM-DD`), for backfilling. Overrides `SCRAPE_MONTHS`. |
 | `SHOW_BROWSER` | env | shown | `SHOW_BROWSER=0` runs Chrome headless. |
 | `SCHEDULE` | env | none | Cron expression; keeps `npm run scrape` running on a schedule. |
 | `POLICIES_DIR` / `REPORTS_DIR` | env | `data/policies` / `data/reports` | Where insurance documents and imported reports are kept. |

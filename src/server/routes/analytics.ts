@@ -14,6 +14,7 @@ import { scrapeState, startScrape, submitOtp } from '../scrapeJob.js';
 import { toApi } from '../crud.js';
 import { monthPlan } from '../../analytics/commitments.js';
 import { parseFilter } from './transactions.js';
+import { sendCsv } from '../csv.js';
 
 type Q = Record<string, string | undefined>;
 
@@ -60,6 +61,23 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
   app.get('/api/cashflow', async req => {
     const q = req.query as Q;
     return cashflowHistory(db, { ...parseFilter(q), cycles: Number(q.cycles ?? 6) });
+  });
+
+  // month by month: the totals, then one column per category (the same numbers as /api/cashflow)
+  app.get('/api/cashflow/export.csv', async (req, reply) => {
+    const q = req.query as Q;
+    const cycles = Math.min(Math.max(Number(q.cycles ?? 12) || 12, 1), 60);
+    const history = cashflowHistory(db, { ...parseFilter(q), cycles }).filter(c => c.txCount > 0);
+    const label = (c: { name: string; parentName: string | null }) => (c.parentName ? `${c.parentName} / ${c.name}` : c.name);
+    const categories = [...new Set(history.flatMap(c => c.byCategory.map(label)))].sort((a, b) => a.localeCompare(b, 'he'));
+    return sendCsv(reply, `תזרים-${cycles}-חודשים.csv`,
+      ['חודש', 'מתאריך', 'עד תאריך', 'הכנסות', 'הוצאות', 'קבועות', 'משתנות', 'נטו', 'הפקדות לחיסכון', ...categories],
+      history.map(c => {
+        const byCat = new Map<string, number>();
+        for (const s of c.byCategory) byCat.set(label(s), (byCat.get(label(s)) ?? 0) + s.spend);
+        return [c.cycle.key, c.cycle.start, c.cycle.end, c.income, c.spend, c.fixed, c.dynamic, c.net, c.savingsDeposits,
+          ...categories.map(n => byCat.get(n) ?? 0)];
+      }), `cashflow-${cycles}-months.csv`);
   });
 
   app.get('/api/forecast', async req => {

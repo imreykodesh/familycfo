@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, qs, type CycleSummary, type Forecast, type IncomeExpectation, type InstallmentPlan, type MonthIncome, type SavingsCapacity, type TightMonthPlan } from '../api';
 import { useFilters, useLookups } from '../state';
 import { day, monthName, SCHEDULED_KIND_LABELS } from '../format';
-import { BarChart3, Banknote, CalendarRange, Layers, Settings2, TrendingUp, TriangleAlert, Users } from 'lucide-react';
+import { BarChart3, Banknote, CalendarRange, Download, Layers, Settings2, TrendingUp, TriangleAlert, Users } from 'lucide-react';
 import { ErrorBox, Loading, MemberBadge, Money, PageHeader, SectionTitle, Segmented } from '../components/ui';
 import { CashflowBars, Columns, ForecastChart } from '../components/charts';
 import { accountIcon, MemberAvatar } from '@/lib/visuals';
@@ -75,7 +75,10 @@ export default function Cashflow() {
   return (
     <>
       <PageHeader title="תזרים ותחזית" icon={TrendingUp} subtitle={`מתכננים את ${monthName(f.period.key)} · תחזית עד ${day(f.horizonEnd)}`}
-        actions={<Link to="/fixed#scheduled" className="btn"><Settings2 className="h-4 w-4" />ניהול הכנסות והוצאות קבועות</Link>} />
+        actions={<>
+          <a className="btn" href={`/api/cashflow/export.csv${qs({ ...params, cycles: 12 })}`} download><Download className="h-4 w-4" />ייצוא 12 חודשים ל-CSV</a>
+          <Link to="/fixed#scheduled" className="btn"><Settings2 className="h-4 w-4" />ניהול הכנסות והוצאות קבועות</Link>
+        </>} />
 
       {tight?.isTight && (
         <div role="status" className="card animate-rise-in mb-4 border-rose-200 bg-gradient-to-l from-rose-50/80 to-orange-50/40 dark:border-rose-900/60 dark:from-rose-950/30 dark:to-orange-950/10">

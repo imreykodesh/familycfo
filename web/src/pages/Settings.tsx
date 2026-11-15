@@ -63,6 +63,16 @@ export default function Settings() {
             <input className="input num" type="number" step={500} defaultValue={meta.settings.balance_buffer}
               onBlur={e => saveSettings.mutate({ balance_buffer: e.target.value })} />
           </label>
+          <label className="block">
+            <span className="label">כמה חודשים אחורה לעדכן</span>
+            <input className="input num" type="number" min={1} max={24} defaultValue={meta.settings.scrape_months_back ?? 3}
+              onBlur={e => {
+                const n = Math.round(Number(e.target.value));
+                if (n >= 1 && n <= 24) saveSettings.mutate({ scrape_months_back: String(n) });
+                else e.target.value = meta.settings.scrape_months_back ?? '3';
+              }} />
+            <span className="mt-1.5 block text-xs text-zinc-500">בכל לחיצה על ״עדכון נתונים״ (1–24). חלק מהבנקים וחברות האשראי מחזירים פחות היסטוריה.</span>
+          </label>
         </div>
       </Section>
 

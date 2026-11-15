@@ -10,6 +10,7 @@ import { insuranceRoutes } from './routes/insurance.js';
 import { pensionRoutes } from './routes/pension.js';
 import { investmentRoutes } from './routes/investments.js';
 import { setRate } from '../analytics/fx.js';
+import { MAX_MONTHS_BACK } from '../scraper.js';
 
 const db = getDb();
 // Local-only: this API exposes the household's full financial data and has no login
@@ -53,9 +54,13 @@ app.get('/api/meta', async () => ({
   settings: Object.fromEntries((db.prepare(`SELECT key, value FROM settings`).all() as { key: string; value: string }[]).map(s => [s.key, s.value])),
 }));
 
-app.put('/api/settings', async req => {
+app.put('/api/settings', async (req, reply) => {
   const body = req.body as Record<string, string | number>;
-  const allowed = ['cycle_start_day', 'balance_buffer'];
+  const allowed = ['cycle_start_day', 'balance_buffer', 'scrape_months_back'];
+  const months = body.scrape_months_back;
+  if (months != null && !(Number.isInteger(Number(months)) && Number(months) >= 1 && Number(months) <= MAX_MONTHS_BACK)) {
+    return reply.code(400).send({ error: `מספר החודשים לעדכון צריך להיות בין 1 ל-${MAX_MONTHS_BACK}` });
+  }
   const upsert = db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`);
   for (const [k, v] of Object.entries(body)) if (allowed.includes(k)) upsert.run(k, String(v));
   return { ok: true };

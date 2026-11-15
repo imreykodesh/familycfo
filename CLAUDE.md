@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run scrape     # Scrape all banks once, then run the pipeline (SCRAPE_ONLY=isracard,max to limit; SCRAPE_FROM=2026-01-01 to backfill; SHOW_BROWSER=0 headless; SCHEDULE="0 7 * * *" to keep running on cron)
+npm run scrape     # Scrape all banks once, then run the pipeline (SCRAPE_ONLY=isracard,max to limit; months back = SCRAPE_MONTHS ?? setting scrape_months_back ?? 3; SCRAPE_FROM=2026-01-01 to backfill; SHOW_BROWSER=0 headless; SCHEDULE="0 7 * * *" to keep running on cron)
 npm run dev        # Household app: API (127.0.0.1:4310) + web UI (http://127.0.0.1:5180)
 npm run pipeline   # Re-run classification / recurring / suggestions / alerts without scraping
 npm run migrate    # Apply DB migrations (also runs automatically on open)
