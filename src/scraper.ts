@@ -3,38 +3,14 @@ import { getDb, type DB } from './db/connection.js';
 import { saveScrapedAccount, recordScrapeRun } from './db/ingestRepo.js';
 import * as readline from 'readline';
 import type { Page } from 'puppeteer';
-import { existsSync } from 'fs';
-import { platform } from 'os';
-
-function findChromePath(): string | undefined {
-  const paths: Record<string, string[]> = {
-    darwin: [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ],
-    linux: [
-      '/usr/bin/google-chrome',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/chromium',
-    ],
-    win32: [
-      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    ],
-  };
-
-  const platformPaths = paths[platform()] || [];
-  for (const p of platformPaths) {
-    if (existsSync(p)) {
-      return p;
-    }
-  }
-  return undefined;
-}
+import { findBrowser, NO_BROWSER } from './browser.js';
 
 interface AccountConfig {
   companyId: keyof typeof CompanyTypes;
   credentials: Record<string, string>;
+  /** the desktop app's login id and label (two logins of one company) */
+  id?: string;
+  label?: string;
 }
 
 export interface Config {
@@ -48,6 +24,8 @@ export interface ScrapeHooks {
   /** asked when the bank shows its OTP screen; defaults to the terminal. '' gives up */
   requestOtp?: (company: string) => Promise<string>;
   onProgress?: (event: ScrapeProgress) => void;
+  /** show the browser window (false = headless); defaults to SHOW_BROWSER, which is on unless '0' */
+  showBrowser?: boolean;
 }
 export type ScrapeProgress =
   | { type: 'start'; company: string }
@@ -172,14 +150,24 @@ export function scrapeStartDate(db: DB, from = process.env.SCRAPE_FROM, now = ne
   return start;
 }
 
-export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeHooks = {}, opts: { from?: string } = {}): Promise<ScrapeSummary[]> {
-  const startDate = scrapeStartDate(db, opts.from ?? process.env.SCRAPE_FROM);
+export interface ScrapeOptions {
+  /** only log in and read a few days, to check the login: nothing is saved */
+  checkOnly?: boolean;
+  /** 'max' (as far back as each company allows) or YYYY-MM-DD; default SCRAPE_FROM, else the months-back setting */
+  from?: string;
+}
+
+export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeHooks = {}, opts: ScrapeOptions = {}): Promise<ScrapeSummary[]> {
+  // a login check reads only the last 7 days
+  const startDate = opts.checkOnly ? new Date(Date.now() - 7 * 86_400_000) : scrapeStartDate(db, opts.from ?? process.env.SCRAPE_FROM);
   const startDay = startDate.toISOString().slice(0, 10);
   console.log(`Scraping from ${startDay}`);
 
   // SCRAPE_ONLY=visaCal,leumi limits the run to those companies
   const only = process.env.SCRAPE_ONLY?.split(',').map(s => s.trim()).filter(Boolean);
   const summaries: ScrapeSummary[] = [];
+  const browser = await findBrowser();
+  if (!browser) throw new Error(NO_BROWSER);
 
   for (const account of config.accounts) {
     if (only && !only.includes(account.companyId)) continue;
@@ -192,17 +180,17 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
       const scraper = createScraper({
         companyId: CompanyTypes[account.companyId],
         startDate,
-        futureMonthsToScrape: 2, // upcoming card charges and future installments
+        futureMonthsToScrape: opts.checkOnly ? 0 : 2, // upcoming card charges and future installments
         // per-transaction detail requests (e.g. Isracard PirteyIska_204) get rate-limited (HTTP 429) as automation
         additionalTransactionInformation: false,
         includeRawTransaction: true,
         verbose: true,
         combineInstallments: false,
-        showBrowser: process.env.SHOW_BROWSER !== '0',
+        showBrowser: hooks.showBrowser ?? process.env.SHOW_BROWSER !== '0',
         timeout: 120000, // 2 minutes for OTP
         defaultTimeout: 120000, // 2 minutes for navigation
         navigationRetryCount: 1,
-        executablePath: findChromePath(),
+        executablePath: browser.path,
         args: [
           '--disable-blink-features=AutomationControlled',
           '--no-sandbox',
@@ -277,7 +265,7 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
       if (!result.success) {
         console.error(`Failed to scrape ${account.companyId}:`, result.errorType, result.errorMessage);
         if (pageStateAtClose) console.error(pageStateAtClose);
-        recordScrapeRun(db, { company: account.companyId, startedAt, success: false, startDate: startDay,
+        if (!opts.checkOnly) recordScrapeRun(db, { company: account.companyId, startedAt, success: false, startDate: startDay,
           errorType: result.errorType, errorMessage: result.errorMessage, pageState: pageStateAtClose });
         summaries.push({ company: account.companyId, success: false, newTransactionIds: [], errorType: result.errorType });
         hooks.onProgress?.({ type: 'done', company: account.companyId, success: false, newTransactions: 0,
@@ -286,6 +274,12 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
       }
 
       const newIds: number[] = [];
+      if (opts.checkOnly) {
+        console.log(`  ${account.companyId}: login OK`);
+        summaries.push({ company: account.companyId, success: true, newTransactionIds: [] });
+        hooks.onProgress?.({ type: 'done', company: account.companyId, success: true, newTransactions: 0 });
+        continue;
+      }
       for (const acc of result.accounts ?? []) {
         const saved = saveScrapedAccount(db, account.companyId, acc);
         newIds.push(...saved.insertedIds);
@@ -297,7 +291,7 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
       hooks.onProgress?.({ type: 'done', company: account.companyId, success: true, newTransactions: newIds.length });
     } catch (err) {
       console.error(`Error scraping ${account.companyId}:`, err);
-      recordScrapeRun(db, { company: account.companyId, startedAt, success: false, startDate: startDay,
+      if (!opts.checkOnly) recordScrapeRun(db, { company: account.companyId, startedAt, success: false, startDate: startDay,
         errorType: 'EXCEPTION', errorMessage: err instanceof Error && err.stack ? err.stack.slice(0, 2000) : String(err), pageState: pageStateAtClose });
       summaries.push({ company: account.companyId, success: false, newTransactionIds: [], errorType: 'EXCEPTION' });
       hooks.onProgress?.({ type: 'done', company: account.companyId, success: false, newTransactions: 0,

@@ -5,7 +5,7 @@ import {
   ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CalendarDays, ChevronDown, ChevronUp, CreditCard, Download, EyeOff, Hash, Inbox,
   MoreHorizontal, PenLine, PieChart, PiggyBank, Plus, Receipt, Scale, ShoppingBag, TrendingUp, Undo2, X,
 } from 'lucide-react';
-import { api, qs, type DataCoverage, type Tx } from '../api';
+import { api, qs, type HistoryRange, type Tx } from '../api';
 import { useFilters, useLookups } from '../state';
 import { day, KIND_LABELS, monthName, todayIso } from '../format';
 import {
@@ -135,7 +135,7 @@ export default function Transactions() {
   const allSelected = rows.length > 0 && rows.every(r => selected.has(r.id));
   const toggle = (id: number) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   // the months to pick from: back to the oldest scraped row (at least a year)
-  const coverage = useQuery({ queryKey: ['coverage'], queryFn: () => api.get<DataCoverage>('/coverage') });
+  const coverage = useQuery({ queryKey: ['history-range'], queryFn: () => api.get<HistoryRange>('/history-range') });
   const cycles = useMemo(() => {
     const earliest = coverage.data?.earliest?.slice(0, 7);
     const now = todayIso().slice(0, 7);

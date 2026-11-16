@@ -33,8 +33,8 @@ export interface CycleSummary {
   byCategory: CategorySpend[]; byMember: Record<string, { income: number; spend: number }>;
   byBusiness: Record<string, { income: number; spend: number }>;
 }
-/** GET /coverage: how far back the scraped data goes per company; `start` = from when every company has data */
-export interface DataCoverage {
+/** GET /history-range: how far back the scraped data goes per company; `start` = from when every company has data */
+export interface HistoryRange {
   start: string | null; limitedBy: string | null; earliest: string | null;
   companies: { company: string; earliest: string; latest: string; count: number }[];
 }
@@ -249,6 +249,8 @@ export interface InsuranceOverview {
 }
 /** The scrape started from the UI (one at a time). */
 export interface ScrapeJob {
+  /** check = the desktop app checking one login (log in only, nothing saved) */
+  mode: 'scrape' | 'check';
   status: 'idle' | 'running' | 'pipeline' | 'done' | 'failed'; startedAt: string | null; finishedAt: string | null;
   companies: { company: string; status: 'pending' | 'running' | 'done' | 'failed'; newTransactions: number; error: string | null; explanation?: ScrapeErrorExplanation }[];
   /** the bank is waiting for an OTP code */

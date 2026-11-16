@@ -1,5 +1,11 @@
 # FamilyCFO
 
+[![Latest release](https://img.shields.io/github/v/release/nmazuz/familycfo?label=release)](https://github.com/nmazuz/familycfo/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/nmazuz/familycfo/total?label=downloads)](https://github.com/nmazuz/familycfo/releases)
+[![Stars](https://img.shields.io/github/stars/nmazuz/familycfo?style=flat)](https://github.com/nmazuz/familycfo/stargazers)
+[![License: MIT](https://img.shields.io/github/license/nmazuz/familycfo)](LICENSE)
+[![desktop](https://github.com/nmazuz/familycfo/actions/workflows/desktop.yml/badge.svg)](https://github.com/nmazuz/familycfo/actions/workflows/desktop.yml)
+
 **The CFO of your family — local-first, Hebrew, open source.** Every shekel, policy, pension and stock in one place;
 it sees what's coming, warns before there's a problem, and answers your questions about it.
 
@@ -155,22 +161,14 @@ accounts, two cards, a mortgage, savings and a small stock portfolio. Delete `de
    names (e.g. "מזון וצריכה") are mapped to it, so most card rows are categorized right away. Fix the rest on the
    transactions page; "החל על תנועות דומות" saves a rule for next time.
 
-## Local build
+## Building the Windows installer and checking the code
 
-`npm run dev` runs from source with hot reload (two ports). To check everything and run the built app in one process:
-
-```bash
-npm run build          # installs what's missing, typechecks, runs the tests, builds the web app to web/dist
-npm run serve          # API + the built UI on http://127.0.0.1:4310
-```
-
-`npm run build -- --clean` reinstalls the packages from scratch first; `-- --skip-tests` skips the tests. The build
-never touches `bank.db`, `accounts.json` or `data/`. Use `BANK_DB=demo.db npm run serve` for the demo.
-
-**Double-click launchers:** `start-windows.cmd` (Windows) and `start-mac.command` (macOS, in Finder) do all of it —
-build, start, open the browser. Close the window to stop the app. They run `npm run app` (`scripts/start.mjs`), which
-takes `--skip-build` (start the last build), `--demo` (the demo household) and `--no-open`. If the app is already
-running they just open it. Native Windows (outside WSL) is less tested than macOS / Linux.
+- **Windows installer:** double-click `build-windows.cmd` in the project folder. It installs what's missing, typechecks,
+  builds the web UI and the desktop app, and leaves `release\FamilyCFO-<version>-x64.exe`, then opens that folder.
+  Run it on Windows (an installer is built on its own OS). Other systems: `npm run desktop:pack` / `desktop:dist`.
+- **Check before committing:** `npm run check` installs what's missing, typechecks the API, the desktop app and the web
+  UI, and runs the tests — no build. `-- --clean` reinstalls the packages first, `-- --skip-tests` skips the tests.
+  Neither touches `bank.db`, `accounts.json` or `data/`.
 
 ## Everyday use
 
@@ -268,8 +266,9 @@ src/
 web/                    Vite + React + Tailwind, Hebrew RTL
 agent/                  the data chat's instructions (CLAUDE.md) and skills
 tests/                  Vitest, in-memory SQLite
-scripts/build.mjs       `npm run build`: install if needed → typecheck → tests → web/dist
-scripts/start.mjs       `npm run app`: build → serve → open the browser (start-windows.cmd, start-mac.command)
+scripts/check.mjs       `npm run check`: install if needed → typecheck (API, desktop, web) → tests
+build-windows.cmd       double-click: the Windows installer in release/
+PROJECT_MAP.md          the map of the code: files, routes, settings keys, tables, storage keys
 ```
 
 Architecture notes and the key accounting rules are in [CLAUDE.md](CLAUDE.md) (also handy if you develop with an AI assistant).

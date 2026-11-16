@@ -1,3 +1,2 @@
-# cmd.exe needs CRLF line endings; the macOS launcher needs LF
+# cmd.exe needs CRLF line endings (build-windows.cmd, git-sync.cmd)
 *.cmd text eol=crlf
-*.command text eol=lf

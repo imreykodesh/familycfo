@@ -22,6 +22,9 @@ function ago(utc: string): string {
   return rtf.format(Math.round(minutes / 60 / 24), 'day');
 }
 
+const SHOW_KEY = 'scrape.showBrowser';
+const readShow = () => { try { return localStorage.getItem(SHOW_KEY) !== '0'; } catch { return true; } };
+
 const active = (s: ScrapeJob['status'] | undefined) => s === 'running' || s === 'pipeline';
 
 /** Header button that scrapes all banks from the UI, shows progress and asks for the bank's OTP code. */
@@ -29,6 +32,8 @@ export function ScrapeButton() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
+  const [showBrowser, setShowBrowser] = useState(readShow);
+  const toggleShow = (v: boolean) => { setShowBrowser(v); try { localStorage.setItem(SHOW_KEY, v ? '1' : '0'); } catch { /* ignore */ } };
   const job = useQuery({
     queryKey: ['scrape'],
     queryFn: () => api.get<ScrapeJob>('/scrape'),
@@ -39,7 +44,7 @@ export function ScrapeButton() {
 
   // from: 'max' fetches as much history as each company gives (instead of the last 3 months)
   const start = useMutation({
-    mutationFn: (from?: 'max') => api.post<ScrapeJob>('/scrape', from ? { from } : {}),
+    mutationFn: (from?: 'max') => api.post<ScrapeJob>('/scrape', from ? { showBrowser, from } : { showBrowser }),
     onSuccess: () => { setOpen(true); qc.invalidateQueries({ queryKey: ['scrape'] }); },
   });
   const sendOtp = useMutation({
@@ -118,11 +123,15 @@ export function ScrapeButton() {
               </li>
             ))}
           </ul>
+          <label className="flex items-center gap-2 border-t px-4 py-2.5 text-sm">
+            <input type="checkbox" checked={showBrowser} disabled={running} onChange={e => toggleShow(e.target.checked)} />
+            הצג חלון דפדפן בזמן העדכון
+          </label>
           <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
             {data?.status === 'pipeline' ? 'מסווג תנועות ומעדכן חישובים…'
               : data?.status === 'done' ? `הסתיים · נוספו ${data.newTransactions} תנועות חדשות`
               : data?.status === 'failed' ? (data.error ?? 'שגיאה')
-              : running ? 'חלון דפדפן ייפתח לכל בנק — אפשר להמשיך לעבוד בינתיים' : null}
+              : running ? (showBrowser ? 'חלון דפדפן ייפתח לכל בנק — אפשר להמשיך לעבוד בינתיים' : 'רץ ברקע ללא חלון דפדפן') : null}
             {!running && data?.companies.some(c => c.status === 'failed') && (
               <Link to="/logs" className="ms-2 font-medium text-primary hover:underline" onClick={() => setOpen(false)}>ליומן ותקלות</Link>
             )}

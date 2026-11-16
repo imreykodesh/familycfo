@@ -7,6 +7,9 @@ import type { FastifyInstance } from 'fastify';
 import type { DB } from '../db/connection.js';
 import { cycleStartDay, getSetting, today } from '../analytics/common.js';
 import { POLICIES_DIR, REPORTS_DIR } from './routes/insurance.js';
+import { APP_DIR, IN_DESKTOP, dataPath } from '../paths.js';
+import { GEMINI_DEFAULT_MODEL, findKiro, geminiApiKey, geminiCommand, isModelId, kiroEnv, modelSettingKey } from './agentSetup.js';
+import { dataCoverage } from '../analytics/balances.js';
 
 /**
  * The data chat: each message runs one of the user's own AI command-line tools — Claude Code (`claude -p`),
@@ -31,8 +34,7 @@ export function agentProvider(db: DB): AgentProvider {
   return (AGENT_PROVIDERS as readonly string[]).includes(p) ? p as AgentProvider : 'claude';
 }
 
-const ROOT = resolve('.');
-const AGENT_DIR = join(ROOT, 'agent');
+const AGENT_DIR = join(APP_DIR, 'agent');
 // outside the repo, so the project's files, settings and CLAUDE.md aren't part of the agent's context
 const WORKDIR = join(tmpdir(), 'household-agent');
 const GEMINI_DIR = join(tmpdir(), 'household-agent-gemini');
@@ -58,6 +60,18 @@ You can't open files: the insurance documents and imported reports aren't availa
 from the policy fields in api /insurance, say that the document itself wasn't read, and suggest the Claude option in Settings for it.`,
 };
 
+/** `--model <id>` when the user picked one in Settings; nothing = the tool's own default. All three CLIs take --model. */
+function modelArgs(db: DB, provider: AgentProvider): string[] {
+  const model = getSetting(db, modelSettingKey(provider), '').trim() || (provider === 'gemini' ? GEMINI_DEFAULT_MODEL : '');
+  return model && isModelId(model) ? ['--model', model] : [];
+}
+
+function coverageText(db: DB): string {
+  const rows = dataCoverage(db);
+  if (!rows.length) return '- (no transactions yet)';
+  return rows.map(c => `- ${c.name} [${c.accountId}, ${c.kind}]: ${c.firstDate} → ${c.lastDate} (${c.rows} rows)`).join('\n');
+}
+
 /** Only what changes: the standing instructions and the skills live in agent/ (CLAUDE.md, .claude/skills). */
 function systemPrompt(db: DB, provider: AgentProvider = 'claude'): string {
   const members = (db.prepare(`SELECT id, name FROM members ORDER BY id`).all() as { id: number; name: string }[])
@@ -68,6 +82,9 @@ function systemPrompt(db: DB, provider: AgentProvider = 'claude'): string {
 ${TOOLS_TEXT[provider]}
 
 Today is ${today()}. A month ("cycle", key YYYY-MM) starts on day ${cycleStartDay(db)} of the month. Members: ${members}.
+
+Data coverage (first → last day with rows, per account; before the first day there is no data from that account, not zero):
+${coverageText(db)}
 
 Database schema (bank.db):
 ${schemaText(db)}`;
@@ -101,20 +118,32 @@ function syncAgentFiles(): void {
     else mkdirSync(join(docs, name));
   }
 
-  const guard = `${JSON.stringify(process.execPath)} ${JSON.stringify(join(ROOT, 'src', 'agent', 'guard-read.mjs'))} ${JSON.stringify(docs)}`;
+  // in the desktop app process.execPath is Electron's binary: it runs the script as plain Node because claude (and so
+  // its hooks) inherits ELECTRON_RUN_AS_NODE=1 from claudeEnv()
+  const guard = `${JSON.stringify(process.execPath)} ${JSON.stringify(join(APP_DIR, 'src', 'agent', 'guard-read.mjs'))} ${JSON.stringify(docs)}`;
   writeFileSync(join(WORKDIR, '.claude', 'settings.json'), JSON.stringify({
     hooks: { PreToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: guard }] }] },
   }, null, 2));
 }
 
+/** The port this server actually listens on (the desktop app may pick a free one); set on each chat request. */
+let apiPort = Number(process.env.PORT ?? 4310);
+
+/** The household MCP server: from source with tsx, or (desktop app) the bundled build/desktop/mcp.mjs run by Electron's Node. */
+function mcpCommand(): { command: string; args: string[] } {
+  if (process.env.HOUSEHOLD_MCP_SCRIPT) return { command: process.execPath, args: [process.env.HOUSEHOLD_MCP_SCRIPT] };
+  // tsx's own CLI script run by this Node: node_modules/.bin/tsx is a shell script that Windows can't spawn directly
+  return { command: process.execPath, args: [join(APP_DIR, 'node_modules', 'tsx', 'dist', 'cli.mjs'), join(APP_DIR, 'src', 'agent', 'mcp.ts')] };
+}
+
 /** The household MCP server (read + whitelisted changes), as every provider's config spells it. */
 function householdServer() {
   return {
-    command: join(ROOT, 'node_modules', '.bin', 'tsx'),
-    args: [join(ROOT, 'src', 'agent', 'mcp.ts')],
+    ...mcpCommand(),
     env: {
-      BANK_DB: resolve(process.env.BANK_DB ?? 'bank.db'),
-      HOUSEHOLD_API: `http://127.0.0.1:${process.env.PORT ?? 4310}`,
+      ...(IN_DESKTOP ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
+      BANK_DB: process.env.BANK_DB ? resolve(process.env.BANK_DB) : dataPath('bank.db'),
+      HOUSEHOLD_API: `http://127.0.0.1:${apiPort}`,
     },
   };
 }
@@ -126,6 +155,8 @@ function claudeEnv(): NodeJS.ProcessEnv {
   // the API may itself be started from a Claude Code session
   delete env.CLAUDECODE;
   delete env.CLAUDE_CODE_ENTRYPOINT;
+  // the desktop app: the Read hook runs Electron's binary as Node (claude itself is not Electron, it ignores this)
+  if (IN_DESKTOP) env.ELECTRON_RUN_AS_NODE = '1';
   return env;
 }
 
@@ -163,9 +194,10 @@ function startClaude(db: DB, message: string, sessionId: string | undefined): Ru
     '--strict-mcp-config', '--mcp-config', JSON.stringify({ mcpServers: { household: householdServer() } }),
     '--allowedTools', 'mcp__household__api,mcp__household__sql,mcp__household__change,Skill,Read(./docs/**)',
     '--system-prompt', systemPrompt(db, 'claude'),
+    ...modelArgs(db, 'claude'),
     ...(sessionId ? ['--resume', sessionId] : []),
   ];
-  const child = spawn('claude', args, { cwd: WORKDIR, env: claudeEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.env.CLAUDE_PATH || 'claude', args, { cwd: WORKDIR, env: claudeEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
   child.stdin.end(message);
   return {
     child, lineMode: true,
@@ -195,12 +227,25 @@ function startClaude(db: DB, message: string, sessionId: string | undefined): Ru
  * (`tools.core`), only the household MCP server (trusted: no confirmation, which headless can't ask for), and the skills;
  * GEMINI_SYSTEM_MD replaces Gemini's coding-agent system prompt with ours.
  */
+/** Gemini CLI 0.68's built-in tools (its *_TOOL_NAME constants), all but activate_skill: no files, shell, web, agents. */
+const GEMINI_BUILTIN_TOOLS = [
+  'ask_user', 'complete_task', 'enter_plan_mode', 'exit_plan_mode', 'get_internal_docs', 'glob', 'google_web_search', 'grep_search',
+  'invoke_agent', 'list_directory', 'list_mcp_resources', 'read_file', 'read_many_files', 'read_mcp_resource', 'replace',
+  'run_shell_command', 'save_memory', 'search_file_content', 'take_snapshot', 'tracker_add_dependency', 'tracker_create_task',
+  'tracker_get_task', 'tracker_list_tasks', 'tracker_update_task', 'tracker_visualize', 'update_topic', 'web_fetch', 'write_file', 'write_todos',
+];
+
 function startGemini(db: DB, message: string, sessionId: string | undefined): Run {
   rmSync(join(GEMINI_DIR, '.gemini'), { recursive: true, force: true });
   mkdirSync(join(GEMINI_DIR, '.gemini'), { recursive: true });
   cpSync(SKILLS_DIR, join(GEMINI_DIR, '.gemini', 'skills'), { recursive: true });
+  if (!geminiApiKey()) throw new Error('חסר מפתח Gemini API. הדביקו אותו בהגדרות ← עוזר AI (מקבלים אותו בחינם ב-aistudio.google.com/apikey)');
   writeFileSync(join(GEMINI_DIR, '.gemini', 'settings.json'), JSON.stringify({
-    tools: { core: ['activate_skill'] },
+    // the API key the user saved in the app (Google ended the free "sign in with Google" for third-party clients)
+    security: { auth: { selectedType: 'gemini-api-key' } },
+    // every built-in tool off except activate_skill. (`tools.core: ['activate_skill']` also hides the MCP tools from the
+    // model in CLI 0.68 — it then invents tool names and can't read the data.) The list is CLI 0.68's built-ins.
+    tools: { exclude: GEMINI_BUILTIN_TOOLS },
     mcp: { allowed: ['household'] },
     mcpServers: { household: { ...householdServer(), trust: true, includeTools: ['api', 'sql', 'change'] } },
   }, null, 2));
@@ -209,11 +254,17 @@ function startGemini(db: DB, message: string, sessionId: string | undefined): Ru
 
   const args = [
     '--output-format', 'stream-json', '--allowed-mcp-server-names', 'household', '--extensions', 'none', '--skip-trust',
+    ...modelArgs(db, 'gemini'),
     ...(sessionId ? ['--resume', sessionId] : []),
   ];
-  const child = spawn('gemini', args, {
-    cwd: GEMINI_DIR, stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, GEMINI_SYSTEM_MD: systemFile, GEMINI_CLI_TRUST_WORKSPACE: 'true' },
+  const gemini = geminiCommand();
+  const apiKey = geminiApiKey();
+  const child = spawn(gemini.command, [...gemini.args, ...args], {
+    cwd: GEMINI_DIR, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
+    env: {
+      ...process.env, ...gemini.env, GEMINI_SYSTEM_MD: systemFile, GEMINI_CLI_TRUST_WORKSPACE: 'true',
+      ...(apiKey ? { GEMINI_API_KEY: apiKey } : {}),
+    },
   });
   // no prompt argument: in headless mode the question is read from stdin
   child.stdin.end(message);
@@ -238,7 +289,14 @@ function startGemini(db: DB, message: string, sessionId: string | undefined): Ru
       } else if (ev.type === 'error' && ev.severity === 'error') {
         errors.push(String(ev.message ?? ''));
       } else if (ev.type === 'result') {
-        emit({ type: 'done', sessionId: session, error: ev.status === 'error' ? readableError(String(ev.error?.message || errors.join('\n') || 'error')) : null });
+        const raw = ev.status === 'error' ? readableError(String(ev.error?.message || errors.join('\n') || 'error')) : null;
+        emit({ type: 'done', sessionId: session,
+          error: !raw ? null
+            : /API key not valid|API_KEY_INVALID/i.test(raw) ? 'מפתח Gemini לא תקין. החליפו אותו בהגדרות ← עוזר AI'
+            : /exhausted your daily quota|quota|RESOURCE_EXHAUSTED|429/i.test(raw)
+              ? 'נגמרה המכסה היומית החינמית של המפתח למודל הזה. בחרו מודל אחר בהגדרות ← עוזר AI ← מודל (למשל Flash), או נסו שוב מחר'
+            : /not found|is not supported|NOT_FOUND|no longer available/i.test(raw) ? 'המודל שנבחר לא זמין למפתח הזה. בחרו מודל אחר בהגדרות ← עוזר AI ← מודל'
+            : raw });
         return true;
       }
       return false;
@@ -273,8 +331,10 @@ function startKiro(db: DB, message: string, sessionId: string | undefined): Run 
   }, null, 2));
 
   const args = ['chat', '--v3', '--no-interactive', '--agent', 'household', '--trust-tools=@household', '--require-mcp-startup',
-    '--wrap', 'never', ...(resume ? ['--resume'] : [])];
-  const child = spawn('kiro-cli', args, { cwd: dir, env: { ...process.env, NO_COLOR: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
+    '--wrap', 'never', ...modelArgs(db, 'kiro'), ...(resume ? ['--resume'] : [])];
+  const kiro = findKiro();
+  if (!kiro) throw new Error('Kiro CLI לא מותקן. אפשר להתקין אותו מההגדרות ← עוזר AI');
+  const child = spawn(kiro, args, { cwd: dir, env: kiroEnv(kiro), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
   child.stdin.end(message);
   // eslint-disable-next-line no-control-regex
   const ansi = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07/g;
@@ -287,7 +347,12 @@ function startKiro(db: DB, message: string, sessionId: string | undefined): Run 
     },
     onClose(code, stderr, emit) {
       const clean = stderr.replace(ansi, '').trim();
-      emit({ type: 'done', sessionId: `kiro-${id}`, error: code === 0 ? null : clean.slice(-600) || `kiro-cli exited with code ${code}` });
+      // kiro-cli also logs [INFO] / warnings to stderr: show its error lines only
+      const errorLines = clean.split('\n').filter(l => /^error\b|error:/i.test(l.trim()) && !/^\[(INFO|ERROR)\]/.test(l.trim()));
+      const error = code === 0 ? null
+        : /not logged in|kiro-cli login/i.test(clean) ? 'Kiro לא מחובר. התחברו בהגדרות ← עוזר AI ← ״התחבר ל-Kiro״'
+        : (errorLines.join('\n') || clean.slice(-600)) || `kiro-cli exited with code ${code}`;
+      emit({ type: 'done', sessionId: `kiro-${id}`, error });
     },
   };
 }
@@ -303,6 +368,8 @@ export function agentRoutes(app: FastifyInstance, db: DB): void {
   app.get('/api/agent', async () => ({ provider: agentProvider(db), providers: AGENT_PROVIDERS }));
 
   app.post('/api/agent/chat', async (req, reply) => {
+    const address = app.server.address();
+    if (typeof address === 'object' && address) apiPort = address.port;
     const { message, sessionId: requested } = (req.body ?? {}) as { message?: string; sessionId?: string };
     if (!message?.trim()) return reply.code(400).send({ error: 'message is required' });
     if (requested && !/^[\w-]{8,80}$/.test(requested)) return reply.code(400).send({ error: 'bad sessionId' });
@@ -342,7 +409,7 @@ export function agentRoutes(app: FastifyInstance, db: DB): void {
     child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8'); });
     child.on('error', err => {
       if (finished) return;
-      emit({ type: 'done', error: (err as NodeJS.ErrnoException).code === 'ENOENT' ? `${PROVIDER_NAMES[provider]} is not installed or not on PATH` : err.message });
+      emit({ type: 'done', error: (err as NodeJS.ErrnoException).code === 'ENOENT' ? `${PROVIDER_NAMES[provider]} is not installed or not on PATH — install it and sign in, then restart the app` : err.message });
       finished = true;
       reply.raw.end();
     });

@@ -1,0 +1,44 @@
+# Project Rules
+
+Always answer the user in Hebrew, in plain language (the user is not a programmer). Code, file names, commands and
+commit messages stay in English.
+
+## Before Starting Any Task
+- Read `PROJECT_MAP.md` in the project root: files and their roles, screens and URL parameters, API routes, tables,
+  `settings` keys, `localStorage` keys, the desktop bridge, environment variables, dependencies, scripts.
+- The accounting rules every change must keep are in `CLAUDE.md` (same content as `AGENTS.md`).
+- Check every branch on the server (`git ls-remote --heads origin`), not only `main` — don't build something that
+  already exists on another branch.
+
+## After Completing Any Task
+
+### 1. Update PROJECT_MAP.md
+If the task added, renamed or removed any of the following, update the relevant section **before marking the task done**:
+- A file or folder (and its role)
+- A main exported function
+- A screen or a screen's URL parameter (also "Links into the app" in `agent/CLAUDE.md`)
+- An API route, or the chat's lists in `src/agent/mcp.ts` (`API_PATHS`, `WRITE_PATHS`, `AGENT_SETTINGS`)
+- A table or column (a new migration at the end of `src/db/migrations.ts`; never edit a released one)
+- A `settings` key, a `localStorage` key, a desktop IPC channel
+- An environment variable
+- An external dependency
+- A script (`package.json`, `.cmd`, `scripts/`)
+
+### 2. Update the docs
+- Architecture or rules → `CLAUDE.md` **and** `AGENTS.md` (identical apart from the title).
+- Anything the user sees (commands, settings, privacy) → `README.md`.
+
+### 3. Check
+`npm run check` must pass (install if needed → typecheck API + desktop + web → tests). No build for verification;
+build the installer (`build-windows.cmd`) only when the user asks.
+
+### 4. Git: everything ends on `main`
+Follow `.kiro/steering/git-sync.md`: locally commit to `main` and push; in the cloud a task branch → PR → merge
+right away → delete the branch. Never leave work only on another branch. Don't change `git-sync.cmd` / `git-sync.ps1`
+unless the user asks.
+
+## Order of Final Steps (Always in This Order)
+1. Update `PROJECT_MAP.md` (if applicable)
+2. Update `CLAUDE.md` / `AGENTS.md` / `README.md` / `agent/CLAUDE.md` (if applicable)
+3. `npm run check`
+4. Commit, push and merge to `main`
