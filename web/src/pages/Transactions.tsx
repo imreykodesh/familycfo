@@ -5,7 +5,7 @@ import {
   ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CalendarDays, ChevronDown, ChevronUp, CreditCard, EyeOff, Hash, Inbox,
   MoreHorizontal, PenLine, PieChart, PiggyBank, Plus, Receipt, Scale, ShoppingBag, TrendingUp, Undo2, X,
 } from 'lucide-react';
-import { api, qs, type Tx } from '../api';
+import { api, qs, type DataCoverage, type Tx } from '../api';
 import { useFilters, useLookups } from '../state';
 import { day, KIND_LABELS, monthName, todayIso } from '../format';
 import {
@@ -134,7 +134,16 @@ export default function Transactions() {
   );
   const allSelected = rows.length > 0 && rows.every(r => selected.has(r.id));
   const toggle = (id: number) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const cycles = useMemo(() => cycleOptions(), []);
+  // the months to pick from: back to the oldest scraped row (at least a year)
+  const coverage = useQuery({ queryKey: ['coverage'], queryFn: () => api.get<DataCoverage>('/coverage') });
+  const cycles = useMemo(() => {
+    const earliest = coverage.data?.earliest?.slice(0, 7);
+    const now = todayIso().slice(0, 7);
+    const back = earliest ? (Number(now.slice(0, 4)) - Number(earliest.slice(0, 4))) * 12 + Number(now.slice(5, 7)) - Number(earliest.slice(5, 7)) + 2 : 0;
+    const list = cycleOptions(Math.min(Math.max(12, back), 241));
+    // a month from the URL (e.g. a link from the chat) stays selectable
+    return cycle && !list.includes(cycle) ? [...list, cycle].sort().reverse() : list;
+  }, [coverage.data, cycle]);
   const cyclePickerOptions = useMemo<PickerOption[]>(() => [
     { value: '', label: 'כל התקופות' },
     ...cycles.map(c => ({ value: c, label: monthName(c), icon: <CalendarDays /> })),

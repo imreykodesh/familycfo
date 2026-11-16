@@ -75,8 +75,10 @@ It understands how Israeli money actually moves:
   - Yahoo Finance quotes — **only ticker symbols**, never quantities or values;
   - the data chat, if you use it: your questions and the data it reads go to Anthropic through your own Claude Code login;
   - an optional categorization endpoint you configure (`categoryApiUrl`) receives transaction descriptions.
-- The data chat can only read: a read-only SQL connection, whitelisted GET endpoints of the local API, and the files in
-  `data/` (enforced by a hook that blocks reading anything else).
+- The data chat reads through a read-only SQL connection and whitelisted GET endpoints of the local API, and can change
+  data only through whitelisted endpoints of the same API (budgets, categories, transactions, rules, planned and manual
+  entries, tags and the settings-style tables — never the scrape, bank logins or OTP). It can open only the files in
+  `data/` (enforced by a hook that blocks reading anything else). Back up `bank.db` if you let it make large changes.
 
 ## Quick start — try the demo
 
@@ -129,7 +131,9 @@ accounts, two cards, a mortgage, savings and a small stock portfolio. Delete `de
    ```
 
    A Chrome window opens for each company (`SHOW_BROWSER=0` for headless). If Bank Hapoalim asks for an SMS code,
-   type it in the terminal. To fetch more history: `SCRAPE_FROM=2025-01-01 npm run scrape`.
+   type it in the terminal. To fetch more history: `SCRAPE_FROM=2025-01-01 npm run scrape`, or `SCRAPE_FROM=max` (also "משיכת היסטוריה מלאה"
+   under the update button) for as much as each company gives — Max about 4 years, Leumi 3, Cal 18 months, most
+   others about a year. **מגמות הוצאות → מקסימום** shows the history from the month every company has data for.
 
 4. **Start the app:**
 
@@ -166,13 +170,16 @@ subscription — no API key is stored in the app (`ANTHROPIC_API_KEY` is removed
 Each question starts `claude -p` in a temporary folder with:
 
 - **no built-in tools** except reading documents, limited by a hook to a copy of `data/`;
-- a read-only MCP server (`src/agent/mcp.ts`) with two tools: `api` (whitelisted GET endpoints — the same numbers the
-  screens show) and `sql` (`SELECT` only, on a read-only connection);
+- an MCP server (`src/agent/mcp.ts`) with three tools: `api` (whitelisted GET endpoints — the same numbers the
+  screens show), `sql` (`SELECT` only, on a read-only connection) and `change` (POST / PUT / PATCH / DELETE on
+  whitelisted endpoints — the same calls the screens make);
 - its instructions in [`agent/CLAUDE.md`](agent/CLAUDE.md) and skills in [`agent/.claude/skills/`](agent/.claude/skills)
   (monthly review, subscriptions audit, category deep-dive, trip cost, insurance questions, pension and portfolio
   reviews). Edit them to change how it answers.
 
-The chat never changes data; it tells you where in the app to do it. It gives facts, not investment advice.
+The chat changes data when you ask it to ("set a ₪1,500 budget for restaurants", "move these to groceries", "add a ₪120
+cash expense"); when a change is its own suggestion it asks first, with a one-click button. Its answers link to the
+screen they talk about. It gives facts, not investment advice.
 
 ## Importing pension and insurance reports
 
@@ -198,7 +205,7 @@ Both are idempotent — re-running updates, never duplicates. Policy documents c
 | `BANK_DB` | env | `bank.db` | Database file. Use a copy for experiments. |
 | `PORT` / `WEB_PORT` | env | `4310` / `5180` | API and web app ports (both bind to 127.0.0.1). |
 | `SCRAPE_ONLY` | env | all | `SCRAPE_ONLY=isracard,max` scrapes only these companies. |
-| `SCRAPE_FROM` | env | 3 months back | Start date of the scrape (`YYYY-MM-DD`), for backfilling. |
+| `SCRAPE_FROM` | env | 3 months back | Start date of the scrape (`YYYY-MM-DD`), for backfilling; `max` = as far back as each company allows (up to 5 years). |
 | `SHOW_BROWSER` | env | shown | `SHOW_BROWSER=0` runs Chrome headless. |
 | `SCHEDULE` | env | none | Cron expression; keeps `npm run scrape` running on a schedule. |
 | `POLICIES_DIR` / `REPORTS_DIR` | env | `data/policies` / `data/reports` | Where insurance documents and imported reports are kept. |
@@ -216,7 +223,7 @@ src/
   ingest/               normalize & de-duplicate rows, classification rules, card-bill / transfer reconciliation
   analytics/            pure functions: cash flow, budgets, forecast, recurring, net worth, investments, alerts …
   server/               Fastify API (127.0.0.1) + the data chat runner
-  agent/                read-only MCP server and the document-read guard for the chat
+  agent/                the chat's MCP server (read + whitelisted changes) and the document-read guard
   import/               pension and insurance report importers
   demo.ts               the demo household
 web/                    Vite + React + Tailwind, Hebrew RTL

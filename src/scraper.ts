@@ -136,11 +136,33 @@ export interface ScrapeSummary {
   errorType?: string;
 }
 
-export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeHooks = {}): Promise<ScrapeSummary[]> {
-  // SCRAPE_FROM=2026-01-01 fetches from that date (backfill); otherwise the last 3 months
-  const startDate = process.env.SCRAPE_FROM ? new Date(`${process.env.SCRAPE_FROM}T00:00:00`) : new Date();
-  if (Number.isNaN(startDate.getTime())) throw new Error(`SCRAPE_FROM is not a date: ${process.env.SCRAPE_FROM}`);
-  if (!process.env.SCRAPE_FROM) startDate.setMonth(startDate.getMonth() - 3);
+/**
+ * How far back `from = 'max'` asks for. Each company's scraper clamps the start to what its site gives
+ * (israeli-bank-scrapers 6.x: Max 4 years, Leumi 3, Cal 18 months, Hapoalim / Discount / Mizrahi /
+ * Isracard / Amex about a year), so asking for more is safe — every company returns as much as it can.
+ */
+export const MAX_HISTORY_YEARS = 5;
+
+/** The scrape's start date: `from` (YYYY-MM-DD, or 'max'), else the SCRAPE_FROM env, else 3 months back. */
+export function scrapeStartDate(from = process.env.SCRAPE_FROM): Date {
+  const startDate = new Date();
+  if (!from) {
+    startDate.setMonth(startDate.getMonth() - 3);
+    return startDate;
+  }
+  if (from === 'max') {
+    startDate.setFullYear(startDate.getFullYear() - MAX_HISTORY_YEARS);
+    return startDate;
+  }
+  const date = new Date(`${from}T00:00:00`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || Number.isNaN(date.getTime())) throw new Error(`SCRAPE_FROM is not a date (YYYY-MM-DD or max): ${from}`);
+  return date;
+}
+
+export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeHooks = {}, opts: { from?: string } = {}): Promise<ScrapeSummary[]> {
+  // SCRAPE_FROM=2026-01-01 fetches from that date (backfill), SCRAPE_FROM=max as far back as each company allows;
+  // otherwise the last 3 months
+  const startDate = scrapeStartDate(opts.from ?? process.env.SCRAPE_FROM);
 
   // SCRAPE_ONLY=visaCal,leumi limits the run to those companies
   const only = process.env.SCRAPE_ONLY?.split(',').map(s => s.trim()).filter(Boolean);
