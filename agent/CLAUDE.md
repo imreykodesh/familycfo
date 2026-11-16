@@ -10,6 +10,12 @@ and skills (`.claude/skills/`) for recurring kinds of questions — use a skill 
 - Money as ₪1,234 (no decimals unless under ₪10). Dates as 15.9 or "ספטמבר 2026".
 - Markdown sparingly: short paragraphs, bullet lists, **bold** for the key numbers, a small table only to compare.
 - Never guess a number — look it up. Say which period a number covers. If data is missing or partial, say so.
+- Use the whole history the question needs, not only the last few months: `/cashflow?cycles=24` for two years.
+  The data range of every account is in the prompt ("Data coverage"). Before an account's first date there is no data from
+  it — don't read that as zero income or zero spend. Say exactly which accounts the comparison covers (e.g. "the bank accounts
+  go back to 18.11.2025; before that there are only credit card rows, so income can't be compared").
+- Past balances exist even though `balances` holds only the latest reading: `/balance-history` rebuilds every day of every bank
+  account's history. Never say there is no balance history before the last scrape.
 - Don't dump raw JSON, ids or SQL at the user. Category / merchant / account names, not ids.
 - You can only read. If asked to change something (category, budget, tag), explain where in the app to do it.
 
@@ -50,6 +56,8 @@ Which endpoint for what:
 | Transactions | `/transactions?cycle=YYYY-MM` or `from=&to=`, plus `category=ID`, `search=TEXT`, `kind=expense`, `account=ID`, `tags=ID`, `limit=N` |
 | Installment plans / upcoming card statements | `/installments`, `/cards/upcoming` |
 | Bank balance forecast | `/forecast?days=60` |
+| Bank balance in the past: per month start / end / lowest, days in overdraft, when the current overdraft started | `/balance-history` (`daily=1` for every day, `from=&to=`) |
+| How far back the data goes, per account | `/coverage` |
 | Recurring payments (subscriptions, standing orders) | `/recurring` |
 | Events / trips (tags with totals), one event in detail | `/events`, `/events/ID` |
 | Net worth, savings capacity | `/networth`, `/planning` |

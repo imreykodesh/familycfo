@@ -8,6 +8,7 @@ import { installmentPlans, upcomingCardCharges } from '../../analytics/cards.js'
 import { savingsCapacity, tightMonthPlan } from '../../analytics/planning.js';
 import { buildRecommendations } from '../../analytics/recommendations.js';
 import { netWorth } from '../../analytics/networth.js';
+import { balanceHistory, dataCoverage } from '../../analytics/balances.js';
 import { refreshPrices } from './investments.js';
 import { runPipeline } from '../../pipeline.js';
 import { SCRAPERS } from 'israeli-bank-scrapers';
@@ -146,6 +147,14 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
       ON CONFLICT(key) DO UPDATE SET state = excluded.state, until = excluded.until, updated_at = CURRENT_TIMESTAMP`).run(b.key, b.state, b.until ?? null);
     return { ok: true };
   });
+
+  // each bank account's balance month by month (daily=1: every day), rebuilt from its rows back from the current balance
+  app.get('/api/balance-history', async req => {
+    const q = req.query as Record<string, string | undefined>;
+    return balanceHistory(db, { account: q.account || undefined, from: q.from || undefined, to: q.to || undefined, daily: q.daily === '1' });
+  });
+  // the first / last date the database has rows for, per account
+  app.get('/api/coverage', async () => dataCoverage(db));
 
   app.get('/api/networth', async () => {
     await refreshPrices(db, 5 * 60_000);

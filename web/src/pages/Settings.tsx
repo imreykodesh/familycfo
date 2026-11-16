@@ -74,7 +74,7 @@ export default function Settings() {
                 if (n >= 1 && n <= 24) saveSettings.mutate({ scrape_months_back: String(n) });
                 else e.target.value = meta.settings.scrape_months_back ?? '3';
               }} />
-            <span className="mt-1.5 block text-xs text-zinc-500">בכל לחיצה על ״עדכון נתונים״ (1–24). חלק מהבנקים וחברות האשראי מחזירים פחות היסטוריה.</span>
+            <span className="mt-1.5 block text-xs text-zinc-500">בכל לחיצה על ״עדכון נתונים״ (1–24). בנקים כמו דיסקונט ומזרחי מחזירים לכל היותר 12 חודשים; כרטיסי אשראי — יותר. מה שכבר נשמר נשאר, כך שההיסטוריה מתארכת עם הזמן.</span>
           </label>
         </div>
       </Section>

@@ -17,13 +17,17 @@ const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
 db.pragma('query_only = ON');
 
 // GET endpoints the agent may read (all are read-only)
-const API_PATHS = /^\/(summary|income|cashflow|forecast|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|planned|categories|meta|events(\/\d+)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|liabilities|scheduled|sync-status|scrape\/runs|logs|insurance|pension|investments)$/;
+const API_PATHS = /^\/(summary|income|cashflow|forecast|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|planned|categories|meta|events(\/\d+)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|liabilities|scheduled|sync-status|scrape\/runs|logs|insurance|pension|investments|balance-history|coverage)$/;
 
 const TOOLS = [
   {
     name: 'api',
     description: `GET an endpoint of the household API (JSON). Prefer it: the numbers match the app's screens.
-Paths: /summary, /month-plan?cycle=YYYY-MM, /cashflow?cycles=N (per-month income/spend/byCategory), /budgets?cycle=, /income?cycle=,
+Paths: /summary, /month-plan?cycle=YYYY-MM, /cashflow?cycles=N (per-month income/spend/byCategory, oldest first; N up to 36 —
+ask for as many as the question needs, e.g. 24), /budgets?cycle=, /income?cycle=,
+/coverage (per account: the first and last date the database has rows for — before that there is NO DATA, which is not zero),
+/balance-history?account=ID&from=&to=&daily=1 (each bank account's balance per month: start, end, min + date, days below zero;
+negativeSince = when the current overdraft started; rebuilt from the rows back from the current balance, for the whole history),
 /transactions?cycle=YYYY-MM|from=&to=&category=ID&search=TEXT&kind=expense,income&account=ID&limit=N, /installments, /cards/upcoming,
 /forecast, /recurring, /planned, /networth, /recommendations, /alerts, /categories, /meta (members, accounts, categories, tags),
 /insurance (policies, their documents with a path to open with Read, actual payments, insurance charges with no policy),

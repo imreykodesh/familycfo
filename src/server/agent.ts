@@ -9,6 +9,7 @@ import { cycleStartDay, getSetting, today } from '../analytics/common.js';
 import { POLICIES_DIR, REPORTS_DIR } from './routes/insurance.js';
 import { APP_DIR, IN_DESKTOP, dataPath } from '../paths.js';
 import { findKiro, geminiApiKey, geminiCommand, kiroEnv } from './agentSetup.js';
+import { dataCoverage } from '../analytics/balances.js';
 
 /**
  * The data chat: each message runs one of the user's own AI command-line tools — Claude Code (`claude -p`),
@@ -55,6 +56,12 @@ You can't open files: the insurance documents and imported reports aren't availa
 from the policy fields in api /insurance, say that the document itself wasn't read, and suggest the Claude option in Settings for it.`,
 };
 
+function coverageText(db: DB): string {
+  const rows = dataCoverage(db);
+  if (!rows.length) return '- (no transactions yet)';
+  return rows.map(c => `- ${c.name} [${c.accountId}, ${c.kind}]: ${c.firstDate} → ${c.lastDate} (${c.rows} rows)`).join('\n');
+}
+
 /** Only what changes: the standing instructions and the skills live in agent/ (CLAUDE.md, .claude/skills). */
 function systemPrompt(db: DB, provider: AgentProvider = 'claude'): string {
   const members = (db.prepare(`SELECT id, name FROM members ORDER BY id`).all() as { id: number; name: string }[])
@@ -65,6 +72,9 @@ function systemPrompt(db: DB, provider: AgentProvider = 'claude'): string {
 ${TOOLS_TEXT[provider]}
 
 Today is ${today()}. A month ("cycle", key YYYY-MM) starts on day ${cycleStartDay(db)} of the month. Members: ${members}.
+
+Data coverage (first → last day with rows, per account; before the first day there is no data from that account, not zero):
+${coverageText(db)}
 
 Database schema (bank.db):
 ${schemaText(db)}`;
