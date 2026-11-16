@@ -150,6 +150,23 @@ accounts, two cards, a mortgage, savings and a small stock portfolio. Delete `de
    names (e.g. "מזון וצריכה") are mapped to it, so most card rows are categorized right away. Fix the rest on the
    transactions page; "החל על תנועות דומות" saves a rule for next time.
 
+## Local build
+
+`npm run dev` runs from source with hot reload (two ports). To check everything and run the built app in one process:
+
+```bash
+npm run build          # installs what's missing, typechecks, runs the tests, builds the web app to web/dist
+npm run serve          # API + the built UI on http://127.0.0.1:4310
+```
+
+`npm run build -- --clean` reinstalls the packages from scratch first; `-- --skip-tests` skips the tests. The build
+never touches `bank.db`, `accounts.json` or `data/`. Use `BANK_DB=demo.db npm run serve` for the demo.
+
+**Double-click launchers:** `start-windows.cmd` (Windows) and `start-mac.command` (macOS, in Finder) do all of it —
+build, start, open the browser. Close the window to stop the app. They run `npm run app` (`scripts/start.mjs`), which
+takes `--skip-build` (start the last build), `--demo` (the demo household) and `--no-open`. If the app is already
+running they just open it. Native Windows (outside WSL) is less tested than macOS / Linux.
+
 ## Everyday use
 
 - **Scrape from the browser:** the refresh button at the top of the overview runs the same scrape, shows progress
@@ -229,6 +246,8 @@ src/
 web/                    Vite + React + Tailwind, Hebrew RTL
 agent/                  the data chat's instructions (CLAUDE.md) and skills
 tests/                  Vitest, in-memory SQLite
+scripts/build.mjs       `npm run build`: install if needed → typecheck → tests → web/dist
+scripts/start.mjs       `npm run app`: build → serve → open the browser (start-windows.cmd, start-mac.command)
 ```
 
 Architecture notes and the key accounting rules are in [CLAUDE.md](CLAUDE.md) (also handy if you develop with an AI assistant).

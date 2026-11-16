@@ -22,9 +22,13 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "demo": "tsx src/demo.ts",
-    "dev:demo": "BANK_DB=demo.db npm run dev"
+    "dev:demo": "BANK_DB=demo.db npm run dev",
+    "build": "node scripts/build.mjs",
+    "serve": "tsx src/server/index.ts --serve-web",
+    "app": "node scripts/start.mjs"
   },
   "dependencies": {
+    "@fastify/static": "^10.1.11",
     "better-sqlite3": "^11.7.0",
     "fastify": "^5.12.5",
     "israeli-bank-scrapers": "^6.12.2",
@@ -36,10 +40,10 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
     "@types/node-cron": "^3.0.11",
+    "concurrently": "^9.2.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "vitest": "^4.0.2",
-    "concurrently": "^9.2.1"
+    "vitest": "^4.0.2"
   },
   "overrides": {
     "israeli-bank-scrapers": {

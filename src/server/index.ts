@@ -1,4 +1,7 @@
+import { existsSync } from 'fs';
+import { join, resolve } from 'path';
 import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
 import { getDb } from '../db/connection.js';
 import { registerCrud, toApi } from './crud.js';
 import { transactionRoutes } from './routes/transactions.js';
@@ -85,5 +88,21 @@ app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   reply.code(err.statusCode ?? 500).send({ error: err.message });
 });
 
+// `npm run serve` (--serve-web, or SERVE_WEB=1): the built web app (`npm run build` → web/dist) on the API's own
+// port — one process, no Vite dev server. Unknown non-API paths get index.html so the app's routes work on reload.
+const WEB_DIST = resolve('web', 'dist');
+const serveWeb = process.argv.includes('--serve-web') || process.env.SERVE_WEB === '1';
+if (serveWeb) {
+  if (!existsSync(join(WEB_DIST, 'index.html'))) {
+    console.error(`${join(WEB_DIST, 'index.html')} is missing — run \`npm run build\` first.`);
+    process.exit(1);
+  }
+  await app.register(fastifyStatic, { root: WEB_DIST, wildcard: false });
+  app.setNotFoundHandler((req, reply) => {
+    if (req.method !== 'GET' || req.url.startsWith('/api/')) return reply.code(404).send({ error: 'not found' });
+    return reply.sendFile('index.html');
+  });
+}
+
 await app.listen({ host: HOST, port: PORT });
-console.log(`Household API on http://${HOST}:${PORT}`);
+console.log(serveWeb ? `Household app on http://${HOST}:${PORT}` : `Household API on http://${HOST}:${PORT}`);
