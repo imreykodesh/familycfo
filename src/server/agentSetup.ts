@@ -203,7 +203,7 @@ export function cleanGeminiKey(raw: string): string {
 }
 
 /** What the chat / the settings say when the key's Google project has no prepaid credit left (HTTP 402). */
-export const GEMINI_NO_CREDIT = 'המפתח תקין, אבל ביתרת התשלום מראש (Prepay) של חשבון החיוב שלו ב-Google אין כסף, ולכן Google לא עונה. זיכוי של Google Cloud (למשל 300$) לא נחשב כל עוד יתרת ה-Prepay ריקה. הוסיפו לפחות 5$ ב-aistudio.google.com/billing (הזיכוי ינוצל לפני הכסף), או צרו מפתח בפרויקט בלי חשבון חיוב (המסלול החינמי) והחליפו אותו בהגדרות ← עוזר AI';
+export const GEMINI_NO_CREDIT = 'המפתח תקין, אבל ביתרת התשלום מראש (Prepay) של חשבון החיוב שלו ב-Google אין כסף, ולכן Google לא עונה. הזיכוי של התקופה החינמית של Google Cloud (300$) לא משלם על Gemini API. אפשר ליצור ב-aistudio.google.com/apikey מפתח בפרויקט בלי חשבון חיוב (המסלול החינמי, עם מגבלה יומית) ולהחליף אותו בהגדרות ← עוזר AI, או להוסיף כסף ב-aistudio.google.com/billing';
 export const isGeminiNoCredit = (text: string) => /prepayment credits|credits are depleted|"code":\s*402/i.test(text);
 
 /**
