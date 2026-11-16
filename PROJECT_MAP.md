@@ -26,7 +26,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | מה | איך | הערות |
 |---|---|---|
 | בדיקה לפני commit | `npm run check` (`scripts/check.mjs`) | התקנה אם חסר → typecheck (API + דסקטופ) → typecheck (web) → בדיקות. בלי בנייה. `-- --clean`, `-- --skip-tests` |
-| קובץ התקנה לווינדוס | לחיצה כפולה על `build-windows.cmd` | typecheck → בניית הממשק → bundle לדסקטופ → electron-builder → `release\`. רק על ווינדוס |
+| קובץ התקנה לווינדוס | לחיצה כפולה על `build-windows.cmd` | התקנה (`npm ci`) אם `node_modules` חסר או ישן מ-`package-lock.json` → typecheck → בניית הממשק → bundle לדסקטופ → electron-builder → `release\`. רק על ווינדוס |
 | סנכרון גיט | לחיצה כפולה על `git-sync.cmd` (`git-sync.ps1`) | משיכה ודחיפה של הענף הנוכחי. של המשתמש — לא לשנות בלי בקשה מפורשת |
 | פיתוח | `npm run dev` / `npm run dev:demo` | |
 | דסקטופ מהקוד | `npm run desktop:dev` · `desktop:pack` · `desktop:dist` | |
