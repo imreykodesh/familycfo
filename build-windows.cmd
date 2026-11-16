@@ -5,7 +5,9 @@ cd /d "%~dp0"
 set CSC_IDENTITY_AUTO_DISCOVERY=false
 set PUPPETEER_SKIP_DOWNLOAD=1
 
-if not exist node_modules (
+rem install when node_modules is missing or older than package-lock.json (an update added or changed a package)
+call node -e "const f=require('fs'),t=p=>{try{return f.statSync(p).mtimeMs}catch{return 0}};process.exit(['.','web'].some(d=>t(d+'/node_modules/.package-lock.json')<t(d+'/package-lock.json'))?1:0)"
+if errorlevel 1 (
   echo [0/5] Installing dependencies...
   call npm ci --ignore-scripts || goto :fail
   call npm --prefix web ci || goto :fail
