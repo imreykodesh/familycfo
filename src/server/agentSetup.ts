@@ -191,6 +191,36 @@ function saveGeminiKey(key: string | null): void {
   try { chmodSync(file, 0o600); } catch { /* Windows: the user's own profile folder */ }
 }
 
+/** What people paste: the key with spaces / line breaks, in quotes, or as `GEMINI_API_KEY=…`. */
+export function cleanGeminiKey(raw: string): string {
+  return raw
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .replace(/^(export\s+)?(GEMINI_API_KEY|GOOGLE_API_KEY)\s*[=:]\s*/i, '')
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .replace(/\s+/g, '');
+}
+
+/** Ask Google whether the key works (lists the models; no tokens used). */
+async function checkGeminiKey(key: string): Promise<'ok' | 'invalid' | 'offline' | string> {
+  try {
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', {
+      headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(15_000),
+    });
+    if (res.ok) return 'ok';
+    const body = await res.text();
+    if (/API_KEY_INVALID|API key not valid|API key expired/i.test(body) || res.status === 401) return 'invalid';
+    if (/SERVICE_DISABLED|has not been used|is disabled/i.test(body)) {
+      return 'המפתח תקין, אבל ה-Gemini API לא מופעל בפרויקט שלו ב-Google. צרו מפתח ב-aistudio.google.com/apikey (שם הוא מופעל אוטומטית)';
+    }
+    if (/location is not supported|FAILED_PRECONDITION/i.test(body)) return 'Google לא מאפשרת את ה-Gemini API מהמיקום הזה';
+    if (res.status === 403) return 'Google חסמה את המפתח (403). ייתכן שיש לו הגבלות (לפי אתר / אפליקציה / API) — צרו מפתח בלי הגבלות';
+    return `Google החזירה שגיאה (${res.status}). נסו שוב בעוד רגע`;
+  } catch {
+    return 'offline'; // no internet right now: keep the key, the chat will report it if it's wrong
+  }
+}
+
 // ---- routes ---------------------------------------------------------------------------------------------------------
 
 export function agentSetupRoutes(app: FastifyInstance): void {
@@ -207,10 +237,16 @@ export function agentSetupRoutes(app: FastifyInstance): void {
   app.post('/api/agent/kiro/install', async () => startKiroInstall());
 
   app.put('/api/agent/gemini/key', async (req, reply) => {
-    const key = String((req.body as { key?: unknown } | null)?.key ?? '').trim();
-    if (!/^[\w-]{20,200}$/.test(key)) return reply.code(400).send({ error: 'מפתח לא תקין. העתיקו אותו מ-aistudio.google.com/apikey' });
+    const key = cleanGeminiKey(String((req.body as { key?: unknown } | null)?.key ?? ''));
+    // Google's key formats change (AIza…, newer ones with dots): accept any key-like text and let Google decide
+    if (!/^[\x21-\x7e]{20,400}$/.test(key)) {
+      return reply.code(400).send({ error: 'זה לא נראה כמו מפתח: העתיקו את המפתח כולו מ-aistudio.google.com/apikey (כפתור ההעתקה ליד המפתח)' });
+    }
+    const check = await checkGeminiKey(key);
+    if (check === 'invalid') return reply.code(400).send({ error: 'Google דחתה את המפתח. ודאו שהעתקתם אותו במלואו, או צרו מפתח חדש ב-aistudio.google.com/apikey' });
+    if (check !== 'ok' && check !== 'offline') return reply.code(400).send({ error: check });
     saveGeminiKey(key);
-    return { ok: true };
+    return { ok: true, verified: check === 'ok' };
   });
   app.delete('/api/agent/gemini/key', async () => { saveGeminiKey(null); return { ok: true }; });
 }
