@@ -17,6 +17,13 @@ call npm --prefix web run build || goto :fail
 echo [2/4] Bundling the desktop app...
 call npm run desktop:bundle || goto :fail
 
+rem the previous unpacked app can stay locked (antivirus / file watchers): move it aside so the build can recreate it
+if exist release\win-unpacked (
+  if exist release\win-unpacked-old rmdir /s /q release\win-unpacked-old
+  ren release\win-unpacked win-unpacked-old
+  rmdir /s /q release\win-unpacked-old 2>nul
+)
+
 echo [3/4] Building the installer...
 call npx electron-builder --win --x64 --publish never
 set BUILD_ERR=%ERRORLEVEL%
