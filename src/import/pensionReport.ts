@@ -43,10 +43,10 @@ function feeText(p: Product): string | null {
 
 export function importPensionReport(db: DB, report: Report): { assets: number; created: number; deposits: number; policies: number } {
   const memberId = db.prepare(`SELECT id FROM members WHERE name = ?`).pluck().get(report.member) as number | undefined;
-  if (memberId == null) throw new Error(`member not found: ${report.member}`);
+  if (memberId == null) throw new Error(`אין בן בית בשם "${report.member}" (השם בדוח צריך להיות כמו בהגדרות ← בני הבית)`);
   const sum = report.products.reduce((s, p) => s + p.balance, 0);
   if (Math.abs(sum - report.summary.totalSavings) > 2) {
-    throw new Error(`products add up to ${sum}, the report says ${report.summary.totalSavings} — check the extraction`);
+    throw new Error(`סכום המוצרים (${sum}) לא שווה לסך החיסכון שבדוח (${report.summary.totalSavings}) — כנראה משהו לא נקרא נכון מהדוח`);
   }
 
   let created = 0, deposits = 0, policies = 0;

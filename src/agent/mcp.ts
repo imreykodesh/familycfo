@@ -6,7 +6,8 @@
  *   sql:    a read-only SELECT on bank.db (opened read-only + query_only)
  *   change: POST / PUT / PATCH / DELETE a whitelisted endpoint of the API — the same calls the screens make,
  *           so every change goes through the app's own rules (manual edits marked as manual, aliases, re-matching).
- *           Never the scrape, the bank OTP, the chat itself or document uploads.
+ *           Never the scrape, the bank OTP, the chat itself or document uploads (pension/import takes the JSON the
+ *           agent extracted from a report the user uploaded).
  */
 import Database from 'better-sqlite3';
 import { createInterface } from 'readline';
@@ -30,7 +31,7 @@ const WRITE_PATHS = new RegExp('^/(' + [
   'transactions/(\\d+|bulk|manual|\\d+/manual)', 'rules(/\\d+)?', 'links(/\\d+)?',
   'planned(/\\d+(/match)?)?',
   'events/\\d+/transactions',
-  'insurance(/\\d+)?', 'insurance/documents/\\d+',
+  'insurance(/\\d+)?', 'insurance/documents/\\d+', 'pension/import',
   'investments/refresh', 'investments/holdings(/\\d+)?',
   '(members|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled)(/\\d+)?',
   'accounts/[\\w:.@-]+',

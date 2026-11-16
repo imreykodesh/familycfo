@@ -9,6 +9,7 @@ import { AGENT_PROVIDERS, agentRoutes } from './agent.js';
 import { MODEL_SETTING_KEYS, agentSetupRoutes, isModelId } from './agentSetup.js';
 import { insuranceRoutes } from './routes/insurance.js';
 import { pensionRoutes } from './routes/pension.js';
+import { reportRoutes } from './routes/reports.js';
 import { investmentRoutes } from './routes/investments.js';
 import { setRate } from '../analytics/fx.js';
 
@@ -109,6 +110,7 @@ export function buildApp(db: DB, opts: Pick<ServerOptions, 'webDist'> = {}): Fas
   agentSetupRoutes(app);
   insuranceRoutes(app, db);
   pensionRoutes(app, db);
+  reportRoutes(app, db);
   investmentRoutes(app, db);
 
   app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {

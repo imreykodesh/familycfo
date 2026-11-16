@@ -9,6 +9,7 @@ import { day, fullDate, monthName, todayIso } from '../format';
 import { Empty, ErrorBox, Loading, MemberBadge, Modal, Money, PageHeader, Progress, SectionTitle, Stat } from '../components/ui';
 import { DonutChart, StackedColumns } from '../components/charts';
 import { askAgent } from '../components/AgentChat';
+import { ImportDocumentsButton } from '../components/ImportDocuments';
 import { cn } from '@/lib/utils';
 
 const TYPE_LABELS: Record<PensionProduct['type'], string> = { pension: 'פנסיה וביטוח מנהלים', keren_hishtalmut: 'קרנות השתלמות', kupat_gemel: 'קופות גמל' };
@@ -41,8 +42,8 @@ export default function Pension() {
   if (!products.length) {
     return (
       <>
-        <PageHeader title="פנסיה וגמל" icon={Umbrella} />
-        <Empty>עוד אין נתוני פנסיה. אפשר לייבא דוח תקופתי מהסוכן או מהמסלקה הפנסיונית (npm run import:pension).</Empty>
+        <PageHeader title="פנסיה וגמל" icon={Umbrella} actions={<ImportDocumentsButton kind="pension" primary />} />
+        <Empty>עוד אין נתוני פנסיה. לחצו על „ייבוא דוח" והעלו את הדוח התקופתי מהסוכן או מהמסלקה הפנסיונית (PDF).</Empty>
       </>
     );
   }
@@ -58,7 +59,10 @@ export default function Pension() {
     <>
       <PageHeader title="פנסיה וגמל" icon={Umbrella}
         subtitle={report ? <>נכון ל-{fullDate(report.asOf)} · {report.source}{s?.agent && <> · הסוכן: {s.agent.name} {s.agent.phone}</>}</> : undefined}
-        actions={<button type="button" className="btn" onClick={() => askAgent('תן לי סקירה של הפנסיה, קרנות ההשתלמות וקופות הגמל שלי', true)}><Sparkles />סקירה עם העוזר</button>} />
+        actions={<>
+          <ImportDocumentsButton kind="pension" />
+          <button type="button" className="btn" onClick={() => askAgent('תן לי סקירה של הפנסיה, קרנות ההשתלמות וקופות הגמל שלי', true)}><Sparkles />סקירה עם העוזר</button>
+        </>} />
 
       <div className="grid grid-cols-2 gap-3 max-[22.5rem]:grid-cols-1 md:gap-4 lg:grid-cols-4">
         <Stat index={0} icon={PiggyBank} label="סך החיסכון" value={totals.value}

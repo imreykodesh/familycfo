@@ -9,6 +9,7 @@ import { useLookups } from '../state';
 import { day, fullDate, todayIso } from '../format';
 import { AccountSelect, Empty, ErrorBox, Field, Loading, MemberBadge, MemberSelect, Modal, Money, PageHeader, Picker, SectionTitle, Stat } from '../components/ui';
 import { askAgent } from '../components/AgentChat';
+import { ImportDocumentsButton } from '../components/ImportDocuments';
 import { cn } from '@/lib/utils';
 
 const TYPES: { value: InsuranceType; label: string; icon: ComponentType<{ className?: string }> }[] = [
@@ -63,6 +64,7 @@ export default function Insurance() {
     <>
       <PageHeader title="ביטוחים" icon={ShieldCheck} subtitle="כל הפוליסות במקום אחד: כיסוי, עלות בפועל, מועדי חידוש והמסמכים עצמם — ואפשר לשאול עליהם את העוזר"
         actions={<>
+          <ImportDocumentsButton kind="insurance" />
           <button type="button" className="btn" onClick={() => askAgent('תן לי סקירה של כל הביטוחים שלנו: מה יש, כמה זה עולה, כפל ביטוח ומה מתחדש בקרוב', true)}>
             <Sparkles />סקירה עם העוזר
           </button>

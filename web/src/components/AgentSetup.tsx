@@ -155,7 +155,7 @@ export function GeminiSetup() {
         <button className="btn btn-primary" disabled={!key.trim() || save.isPending} onClick={() => save.mutate(key.trim())}>שמור</button>
       </div>
       {save.isError && <p className="text-red-600">{(save.error as Error).message}</p>}
-      {!g.bundled && <p className="text-xs text-zinc-500">Gemini CLI לא נמצא בהתקנה הזו (<code dir="ltr">npm install</code> מתקין אותו).</p>}
+      {!g.bundled && <p className="text-xs text-zinc-500">Gemini CLI לא נמצא בהתקנה הזו. התקנה מחדש של האפליקציה (הגרסה האחרונה) תחזיר אותו.</p>}
     </div>
   );
 }

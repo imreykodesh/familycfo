@@ -6,6 +6,7 @@ import { day, todayIso } from '../format';
 import { CircleDashed, Home, Landmark, Lock, type LucideIcon, Pencil, Percent, TrendingUp } from 'lucide-react';
 import { AccountSelect, Empty, Field, Loading, MemberBadge, MemberSelect, Modal, Money, PageHeader, Picker } from '../components/ui';
 import { Gauge } from '../components/charts';
+import { ImportDocumentsButton } from '../components/ImportDocuments';
 
 const INDEX_TYPES: Record<string, string> = { prime: 'פריים', cpi: 'צמוד מדד', fixed: 'קבועה לא צמודה', other: 'אחר' };
 const INDEX_ICONS: Record<string, LucideIcon> = { prime: Percent, cpi: TrendingUp, fixed: Lock, other: CircleDashed };
@@ -52,9 +53,12 @@ export default function Loans() {
   return (
     <>
       <PageHeader icon={Home} title="הלוואות ומשכנתא" subtitle={<>יתרה כוללת <Money value={totalBalance} animated className="font-semibold text-foreground" /> · החזר חודשי <Money value={totalMonthly} animated className="font-semibold text-foreground" /></>}
-        actions={<button className="btn btn-primary" onClick={() => setEditing({ type: 'mortgage' })}>+ הלוואה / משכנתא</button>} />
+        actions={<>
+          <ImportDocumentsButton kind="loans" />
+          <button className="btn btn-primary" onClick={() => setEditing({ type: 'mortgage' })}>+ הלוואה / משכנתא</button>
+        </>} />
 
-      {active.length === 0 ? <Empty>הוסיפו את המשכנתא וההלוואות. אם תגדירו יום חיוב וחשבון בנק, ההחזר ייכנס אוטומטית לתחזית התזרים.</Empty> : (
+      {active.length === 0 ? <Empty>הוסיפו את המשכנתא וההלוואות ידנית, או ב„ייבוא דוח" מתוך דוח יתרות משכנתא או לוח סילוקין. אם תגדירו יום חיוב וחשבון בנק, ההחזר ייכנס אוטומטית לתחזית התזרים.</Empty> : (
         <div className="stagger grid gap-4 md:grid-cols-2">
           {active.map((l, idx) => {
             const balance = balanceOf(l);
