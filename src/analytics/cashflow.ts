@@ -1,4 +1,5 @@
 import type { DB } from '../db/connection.js';
+import { localDate } from '../ingest/normalize.js';
 import {
   cycleByKey, cycleFor, cycleStartDay, dateInCycle, filterTx, incomeOf, loadTransactions, median, recentCycles,
   refundOf, round, spendOf, today, trimmedMean, type Cycle, type Tx, type TxFilter,
@@ -84,6 +85,43 @@ export function summarizeCycle(txs: Tx[], cycle: Cycle): CycleSummary {
 export function cashflowHistory(db: DB, opts: TxFilter & { cycles?: number; asOf?: string } = {}): CycleSummary[] {
   const txs = filterTx(loadTransactions(db), opts);
   return recentCycles(opts.asOf ?? today(), opts.cycles ?? 6, cycleStartDay(db)).map(c => summarizeCycle(txs, c));
+}
+
+export interface DataCoverage {
+  /** the latest of the companies' first dates: from here on every company has data (null = no scraped rows) */
+  start: string | null;
+  /** the company whose history starts last — the one that limits `start` */
+  limitedBy: string | null;
+  /** the first date of any scraped row (some companies have data from before `start`) */
+  earliest: string | null;
+  companies: { company: string; earliest: string; latest: string; count: number }[];
+}
+
+/**
+ * How far back the scraped data goes, per bank / card company (active accounts; manual rows don't count).
+ * Installments are dated by their charge date, so an old purchase paid in installments doesn't
+ * stretch a card's history back to the purchase.
+ */
+export function dataCoverage(db: DB): DataCoverage {
+  const companies = db.prepare(`
+    SELECT a.company AS company,
+      MIN(CASE WHEN t.txn_type = 'installments' THEN COALESCE(t.processed_date, t.date) ELSE t.date END) AS earliest,
+      MAX(t.date) AS latest, COUNT(*) AS count
+    FROM transactions t JOIN accounts a ON a.id = t.account_id
+    WHERE a.kind IN ('bank', 'card') AND a.active = 1
+    GROUP BY a.company ORDER BY earliest
+  `).all() as DataCoverage['companies'];
+  // the scraper stores instants (e.g. 2026-05-31T21:00:00.000Z = 1 June in Israel) — compare local days
+  for (const c of companies) { c.earliest = localDate(c.earliest); c.latest = localDate(c.latest); }
+  const last = companies.reduce<DataCoverage['companies'][number] | null>((m, c) => (!m || c.earliest > m.earliest ? c : m), null);
+  return { start: last?.earliest ?? null, limitedBy: last?.company ?? null, earliest: companies[0]?.earliest ?? null, companies };
+}
+
+/** Number of cycles from the one containing `from` through the one containing `asOf` (at least 1). */
+export function cyclesSince(from: string, asOf: string, startDay = 1): number {
+  const a = cycleFor(from, startDay).key, b = cycleFor(asOf, startDay).key;
+  const months = (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5, 7)) - Number(a.slice(5, 7)) + 1;
+  return Math.max(1, months);
 }
 
 export function cycleSummary(db: DB, key: string | undefined, filter: TxFilter = {}): CycleSummary {

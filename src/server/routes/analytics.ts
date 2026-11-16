@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { DB } from '../../db/connection.js';
 import { addDays, cycleByKey, cycleFor, cycleStartDay, filterTx, loadTransactions, today } from '../../analytics/common.js';
-import { cashflowHistory, cycleSummary, expectedIncome, monthIncome } from '../../analytics/cashflow.js';
+import { cashflowHistory, cycleSummary, cyclesSince, dataCoverage, expectedIncome, monthIncome } from '../../analytics/cashflow.js';
 import { budgetStatus } from '../../analytics/budgets.js';
 import { buildForecast, bankBalances, planningPeriod } from '../../analytics/forecast.js';
 import { installmentPlans, upcomingCardCharges } from '../../analytics/cards.js';
@@ -19,6 +19,8 @@ import { explainScrapeError } from '../../scrapeErrors.js';
 import { LOG_DIR, readLogs, type LogLevel } from '../../log.js';
 
 type Q = Record<string, string | undefined>;
+/** the longest history /api/cashflow returns (20 years) */
+const MAX_CYCLES = 240;
 
 export function analyticsRoutes(app: FastifyInstance, db: DB): void {
   app.get('/api/summary', async req => {
@@ -60,9 +62,12 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
     return monthIncome(db, parseFilter(q), q.cycle ? cycleByKey(q.cycle, startDay) : cycleFor(today(), startDay));
   });
 
+  // cycles=max: from the month every bank / card company has data for (see /api/coverage)
   app.get('/api/cashflow', async req => {
     const q = req.query as Q;
-    return cashflowHistory(db, { ...parseFilter(q), cycles: Number(q.cycles ?? 6) });
+    const start = q.cycles === 'max' ? dataCoverage(db).start : null;
+    const cycles = q.cycles === 'max' ? (start ? cyclesSince(start, today(), cycleStartDay(db)) : 6) : Number(q.cycles ?? 6);
+    return cashflowHistory(db, { ...parseFilter(q), cycles: Math.min(Math.max(1, cycles || 6), MAX_CYCLES) });
   });
 
   // month by month: the totals, then one column per category (the same numbers as /api/cashflow)
@@ -81,6 +86,8 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
           ...categories.map(n => byCat.get(n) ?? 0)];
       }), `cashflow-${cycles}-months.csv`);
   });
+  /** How far back the scraped history goes, per company, and from when all of them have data. */
+  app.get('/api/coverage', async () => dataCoverage(db));
 
   app.get('/api/forecast', async req => {
     const q = req.query as Q;
@@ -190,7 +197,8 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
     ...scrapeState(),
     lastSuccessAt: db.prepare(`SELECT MAX(finished_at) FROM scrape_runs WHERE success = 1`).pluck().get() as string | null,
   }));
-  app.post('/api/scrape', async () => startScrape(db));
+  // body { from?: 'max' | 'YYYY-MM-DD' } — a backfill; default the last 3 months
+  app.post('/api/scrape', async req => startScrape(db, { from: (req.body as { from?: string } | undefined)?.from || undefined }));
   app.post('/api/scrape/otp', async req => {
     submitOtp(String((req.body as { code?: unknown })?.code ?? '').trim());
     return { ok: true };

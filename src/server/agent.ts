@@ -11,7 +11,8 @@ import { POLICIES_DIR, REPORTS_DIR } from './routes/insurance.js';
 /**
  * The data chat: each message runs one of the user's own AI command-line tools — Claude Code (`claude -p`),
  * Gemini CLI (`gemini`) or Kiro CLI (`kiro-cli chat`), chosen in Settings — with none of their built-in tools,
- * only the read-only `household` MCP server (src/agent/mcp.ts), and streams the answer back as server-sent events.
+ * only the `household` MCP server (src/agent/mcp.ts: read the data, and change it through whitelisted API endpoints),
+ * and streams the answer back as server-sent events.
  *
  * - Claude also gets Read, limited by a hook to a copy of the insurance documents / reports (docs/), and the skills.
  * - Gemini and Kiro get the MCP tools only (no file access at all), so they can't open the documents themselves.
@@ -44,12 +45,15 @@ function schemaText(db: DB): string {
 }
 
 const TOOLS_TEXT: Record<AgentProvider, string> = {
-  claude: `Your only tools are the read-only household tools (api, sql), Skill, and Read for the documents in ./docs/: insurance policies
+  claude: `Your only tools are the household tools (api and sql to read, change to update data the user asked to change), Skill,
+and Read for the documents in ./docs/: insurance policies
 (./docs/policies, paths from api /insurance) and imported pension / insurance reports (./docs/reports, the file from api /pension).`,
-  gemini: `Your only tools are the read-only household tools (api, sql) and activate_skill for the skills listed to you.
+  gemini: `Your only tools are the household tools (api and sql to read, change to update data the user asked to change) and
+activate_skill for the skills listed to you.
 You can't open files: the insurance documents and imported reports aren't available in this setup. For a coverage question, answer
 from the policy fields in api /insurance, say that the document itself wasn't read, and suggest the Claude option in Settings for it.`,
-  kiro: `Your only tools are the read-only household tools (api, sql). The skills below are guides for recurring kinds of questions.
+  kiro: `Your only tools are the household tools (api and sql to read, change to update data the user asked to change).
+The skills below are guides for recurring kinds of questions.
 You can't open files: the insurance documents and imported reports aren't available in this setup. For a coverage question, answer
 from the policy fields in api /insurance, say that the document itself wasn't read, and suggest the Claude option in Settings for it.`,
 };
@@ -103,7 +107,7 @@ function syncAgentFiles(): void {
   }, null, 2));
 }
 
-/** The read-only household MCP server, as every provider's config spells it. */
+/** The household MCP server (read + whitelisted changes), as every provider's config spells it. */
 function householdServer() {
   return {
     command: join(ROOT, 'node_modules', '.bin', 'tsx'),
@@ -157,7 +161,7 @@ function startClaude(db: DB, message: string, sessionId: string | undefined): Ru
     // only the work dir's own settings (the Read guard) and skills, not the user's global ones
     '--setting-sources', 'project',
     '--strict-mcp-config', '--mcp-config', JSON.stringify({ mcpServers: { household: householdServer() } }),
-    '--allowedTools', 'mcp__household__api,mcp__household__sql,Skill,Read(./docs/**)',
+    '--allowedTools', 'mcp__household__api,mcp__household__sql,mcp__household__change,Skill,Read(./docs/**)',
     '--system-prompt', systemPrompt(db, 'claude'),
     ...(sessionId ? ['--resume', sessionId] : []),
   ];
@@ -198,7 +202,7 @@ function startGemini(db: DB, message: string, sessionId: string | undefined): Ru
   writeFileSync(join(GEMINI_DIR, '.gemini', 'settings.json'), JSON.stringify({
     tools: { core: ['activate_skill'] },
     mcp: { allowed: ['household'] },
-    mcpServers: { household: { ...householdServer(), trust: true, includeTools: ['api', 'sql'] } },
+    mcpServers: { household: { ...householdServer(), trust: true, includeTools: ['api', 'sql', 'change'] } },
   }, null, 2));
   const systemFile = join(GEMINI_DIR, 'system.md');
   writeFileSync(systemFile, `${systemPrompt(db, 'gemini')}\n\n${standingInstructions()}`);
@@ -258,7 +262,7 @@ function startKiro(db: DB, message: string, sessionId: string | undefined): Run 
   cpSync(SKILLS_DIR, join(dir, 'skills'), { recursive: true });
   writeFileSync(join(dir, '.kiro', 'agents', 'household.json'), JSON.stringify({
     name: 'household',
-    description: 'Read-only assistant for the household finance data',
+    description: 'Assistant for the household finance data (reads it, and changes it when asked)',
     prompt: `${systemPrompt(db, 'kiro')}\n\n${standingInstructions()}`,
     mcpServers: { household: householdServer() },
     tools: ['@household'],

@@ -46,7 +46,11 @@ const setCompany = (company: string, patch: Partial<ScrapeCompanyState>) => {
   state.companies = state.companies.map(c => (c.company === company ? { ...c, ...patch } : c));
 };
 
-export function startScrape(db: DB): ScrapeJobState {
+/** `from`: 'max' (as much history as each company gives) or YYYY-MM-DD; default the last 3 months. */
+export function startScrape(db: DB, opts: { from?: string } = {}): ScrapeJobState {
+  if (opts.from != null && opts.from !== 'max' && !/^\d{4}-\d{2}-\d{2}$/.test(opts.from)) {
+    throw Object.assign(new Error('from must be "max" or YYYY-MM-DD'), { statusCode: 400 });
+  }
   if (scrapeRunning()) throw Object.assign(new Error('a scrape is already running'), { statusCode: 409 });
   let config: ReturnType<typeof loadConfig>;
   try {
@@ -78,7 +82,7 @@ export function startScrape(db: DB): ScrapeJobState {
                 explanation: explainScrapeError(event.errorType, event.errorMessage) });
         }
       },
-    });
+    }, { from: opts.from });
     state.status = 'pipeline';
     const newIds = results.flatMap(r => r.newTransactionIds);
     state.newTransactions = newIds.length;

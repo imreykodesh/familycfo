@@ -37,8 +37,9 @@ export function ScrapeButton() {
   const data = job.data;
   const running = active(data?.status);
 
+  // from: 'max' fetches as much history as each company gives (instead of the last 3 months)
   const start = useMutation({
-    mutationFn: () => api.post<ScrapeJob>('/scrape', {}),
+    mutationFn: (from?: 'max') => api.post<ScrapeJob>('/scrape', from ? { from } : {}),
     onSuccess: () => { setOpen(true); qc.invalidateQueries({ queryKey: ['scrape'] }); },
   });
   const sendOtp = useMutation({
@@ -129,7 +130,16 @@ export function ScrapeButton() {
         </PopoverContent>
       </Popover>
       {start.error && <span className="text-xs text-red-600">{(start.error as Error).message}</span>}
-      {!running && data?.lastSuccessAt && <span className="text-xs text-muted-foreground">עודכן {ago(data.lastSuccessAt)}</span>}
+      {!running && (
+        <span className="text-xs text-muted-foreground">
+          {data?.lastSuccessAt && <>עודכן {ago(data.lastSuccessAt)} · </>}
+          <button type="button" className="hover:text-fg hover:underline disabled:opacity-50" disabled={start.isPending || !!data?.otp}
+            title="מושך מכל בנק וכרטיס את כל ההיסטוריה שהאתר שלו נותן (עד 5 שנים). לוקח יותר זמן מעדכון רגיל."
+            onClick={() => start.mutate('max')}>
+            משיכת היסטוריה מלאה
+          </button>
+        </span>
+      )}
     </div>
   );
 }

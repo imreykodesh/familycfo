@@ -1,0 +1,3 @@
+# cmd.exe needs CRLF line endings; the macOS launcher needs LF
+*.cmd text eol=crlf
+*.command text eol=lf

@@ -138,6 +138,12 @@ export interface ScrapeSummary {
 
 export const DEFAULT_MONTHS_BACK = 3;
 export const MAX_MONTHS_BACK = 24;
+/**
+ * How far back `from = 'max'` asks for. Each company's scraper clamps the start to what its site gives
+ * (israeli-bank-scrapers 6.x: Max 4 years, Leumi 3, Cal 18 months, Hapoalim / Discount / Mizrahi /
+ * Isracard / Amex about a year), so asking for more is safe — every company returns as much as it can.
+ */
+export const MAX_HISTORY_YEARS = 5;
 
 /** Months of history a scrape fetches: SCRAPE_MONTHS env, else the `scrape_months_back` setting, else 3 (1–24). */
 export function scrapeMonthsBack(db: DB): number {
@@ -147,20 +153,27 @@ export function scrapeMonthsBack(db: DB): number {
   return raw != null && Number.isFinite(n) && n >= 1 ? Math.min(n, MAX_MONTHS_BACK) : DEFAULT_MONTHS_BACK;
 }
 
-/** SCRAPE_FROM=2026-01-01 fetches from that date (backfill); otherwise `scrapeMonthsBack` months back. */
-export function scrapeStartDate(db: DB, now = new Date()): Date {
-  if (process.env.SCRAPE_FROM) {
-    const from = new Date(`${process.env.SCRAPE_FROM}T00:00:00`);
-    if (Number.isNaN(from.getTime())) throw new Error(`SCRAPE_FROM is not a date: ${process.env.SCRAPE_FROM}`);
-    return from;
-  }
+/**
+ * The scrape's start date: `from` (YYYY-MM-DD, or 'max' = as far back as each company allows), else the
+ * SCRAPE_FROM env (same values), else `scrapeMonthsBack` months back.
+ */
+export function scrapeStartDate(db: DB, from = process.env.SCRAPE_FROM, now = new Date()): Date {
   const start = new Date(now);
+  if (from === 'max') {
+    start.setFullYear(start.getFullYear() - MAX_HISTORY_YEARS);
+    return start;
+  }
+  if (from) {
+    const date = new Date(`${from}T00:00:00`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || Number.isNaN(date.getTime())) throw new Error(`SCRAPE_FROM is not a date (YYYY-MM-DD or max): ${from}`);
+    return date;
+  }
   start.setMonth(start.getMonth() - scrapeMonthsBack(db));
   return start;
 }
 
-export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeHooks = {}): Promise<ScrapeSummary[]> {
-  const startDate = scrapeStartDate(db);
+export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeHooks = {}, opts: { from?: string } = {}): Promise<ScrapeSummary[]> {
+  const startDate = scrapeStartDate(db, opts.from ?? process.env.SCRAPE_FROM);
   const startDay = startDate.toISOString().slice(0, 10);
   console.log(`Scraping from ${startDay}`);
 

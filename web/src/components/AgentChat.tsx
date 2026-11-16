@@ -1,16 +1,20 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dialog } from 'radix-ui';
-import { ArrowUp, Database, LoaderCircle, Mic, Plus, Sparkles, Square, X } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowUp, Database, ExternalLink, LoaderCircle, Mic, PencilLine, Plus, Sparkles, Square, X } from 'lucide-react';
 import { api, type AgentProvider } from '../api';
 import { cn } from '@/lib/utils';
 
 /**
  * The data chat: a drawer that asks the user's own AI tool — Claude Code, Gemini CLI or Kiro CLI, chosen in Settings —
- * (via POST /api/agent/chat, streamed) questions about the household data. Text or push-to-talk (the browser's speech recognition, Hebrew).
+ * (via POST /api/agent/chat, streamed) questions about the household data, and lets it change the data through the
+ * app's API. Text or push-to-talk (the browser's speech recognition, Hebrew). Links in its answers open a screen of
+ * the app (`/…`) or send a quick reply (`ask:…`).
  */
 
-interface ChatMessage { role: 'user' | 'assistant'; text: string; tools: string[]; error?: string | null; pending?: boolean }
+/** `changes`: what the agent changed (labels) — the screens are refreshed after such an answer */
+interface ChatMessage { role: 'user' | 'assistant'; text: string; tools: string[]; changes?: string[]; error?: string | null; pending?: boolean }
 interface Saved { sessionId: string | null; messages: ChatMessage[] }
 
 const STORAGE_KEY = 'agent-chat';
@@ -21,6 +25,7 @@ const SUGGESTIONS = [
   'כמה אני מוציא על סופרמרקט ולמה זה משתנה?',
   'כמה עלה הטיול האחרון?',
   'כמה נשאר לי להוציא עד סוף החודש?',
+  'אילו תנועות עוד לא מסווגות? תסווג אותן',
 ];
 const SKILL_LABELS: Record<string, string> = {
   'monthly-review': 'סיכום חודש', 'subscriptions-audit': 'בדיקת מנויים', 'category-deep-dive': 'ניתוח קטגוריה', 'trip-cost': 'עלות טיול',
@@ -45,29 +50,81 @@ function save(s: Saved) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch { /* storage unavailable */ }
 }
 
-/** What a tool call looked at, in words. */
+const PATH_LABELS: Record<string, string> = {
+  summary: 'סקירה', 'month-plan': 'תכנית החודש', cashflow: 'תזרים לפי חודשים', budgets: 'תקציב', income: 'הכנסות',
+  transactions: 'תנועות', 'transactions/bulk': 'תנועות', 'transactions/manual': 'תנועה ידנית', installments: 'תשלומים',
+  'cards/upcoming': 'חיובי כרטיסים', forecast: 'תחזית', recurring: 'הוצאות קבועות', planned: 'הוצאות צפויות', networth: 'שווי נקי',
+  recommendations: 'המלצות', 'recommendations/state': 'המלצות', alerts: 'התראות', categories: 'קטגוריות', meta: 'הגדרות',
+  settings: 'הגדרות', rules: 'כללי סיווג', tags: 'אירועים ותגיות', events: 'אירועים', scheduled: 'קבועות', funds: 'קופות חיסכון',
+  assets: 'נכסים', 'asset-snapshots': 'שווי נכס', liabilities: 'הלוואות', 'liability-snapshots': 'יתרת הלוואה', members: 'בני הבית',
+  accounts: 'חשבונות', businesses: 'עסקים', links: 'קישור החזר', pipeline: 'סיווג מחדש', coverage: 'טווח הנתונים',
+  insurance: 'ביטוחים', pension: 'פנסיה וגמל', investments: 'תיק ההשקעות', 'investments/holdings': 'תיק ההשקעות',
+  'sync-status': 'מצב העדכונים', 'scrape/runs': 'היסטוריית עדכונים', logs: 'קובץ היומן',
+};
+const METHOD_LABELS: Record<string, string> = { POST: 'הוספה', PUT: 'עדכון', PATCH: 'עדכון', DELETE: 'מחיקה' };
+
+/** The screen an API path is about, in words: ids dropped (`transactions/123/manual` → `transactions/manual`). */
+function pathLabel(raw: unknown): string {
+  const path = String(raw ?? '').split('?')[0].replace(/^\/(api\/)?/, '');
+  const generic = path.replace(/\/[^/]*\d[^/]*/g, '');
+  return PATH_LABELS[path] ?? PATH_LABELS[generic] ?? PATH_LABELS[generic.split('/')[0]] ?? path;
+}
+
+/** What a tool call looked at (or changed), in words. */
 function toolLabel(name: string, input: Record<string, unknown> | undefined): string {
   if (name === 'sql') return 'שאילתה על בסיס הנתונים';
   if (name === 'Read') return `קורא: ${String(input?.file_path ?? '').split('/').pop()?.replace(/^\d+-/, '') ?? 'מסמך'}`;
   if (name === 'Skill') return `מדריך: ${SKILL_LABELS[String(input?.skill ?? input?.command ?? '')] ?? String(input?.skill ?? '')}`;
-  const path = String(input?.path ?? '').split('?')[0].replace(/^\/(api\/)?/, '');
-  const labels: Record<string, string> = {
-    summary: 'סקירה', 'month-plan': 'תכנית החודש', cashflow: 'תזרים לפי חודשים', budgets: 'תקציב', income: 'הכנסות',
-    transactions: 'תנועות', installments: 'תשלומים', 'cards/upcoming': 'חיובי כרטיסים', forecast: 'תחזית', recurring: 'הוצאות קבועות',
-    planned: 'הוצאות צפויות', networth: 'שווי נקי', recommendations: 'המלצות', alerts: 'התראות', categories: 'קטגוריות', meta: 'הגדרות',
-    insurance: 'ביטוחים', pension: 'פנסיה וגמל', investments: 'תיק ההשקעות',
-    'sync-status': 'מצב העדכונים', 'scrape/runs': 'היסטוריית עדכונים', logs: 'קובץ היומן',
-  };
-  return labels[path] ?? path;
+  if (name === 'change') return `${METHOD_LABELS[String(input?.method ?? '').toUpperCase()] ?? 'שינוי'}: ${pathLabel(input?.path)}`;
+  return pathLabel(input?.path);
 }
 
-// ---- a small markdown renderer: paragraphs, lists, **bold**, tables, headings --------------------
+// ---- a small markdown renderer: paragraphs, lists, **bold**, tables, headings, links ------------
+
+/** What a link in an answer does: open a screen of the app, or send a quick reply. */
+interface LinkActions { open: (path: string) => void; reply: (text: string) => void; busy: boolean }
+const LinkContext = createContext<LinkActions | null>(null);
+
+function ChatLink({ label, target }: { label: string; target: string }) {
+  const actions = useContext(LinkContext);
+  const text = label.replace(/\*\*/g, '');
+  if (target.startsWith('ask:')) {
+    const reply = target.slice(4).trim() || text;
+    return (
+      <button type="button" disabled={!actions || actions.busy} onClick={() => actions?.reply(reply)}
+        className="btn my-0.5 inline-flex h-auto min-h-7 px-2.5 py-1 text-xs font-medium text-primary">
+        {text}
+      </button>
+    );
+  }
+  if (target.startsWith('/') && !target.startsWith('//')) {
+    return (
+      <a href={target} className="font-medium text-primary underline-offset-2 hover:underline"
+        onClick={e => { if (!actions || e.metaKey || e.ctrlKey) return; e.preventDefault(); actions.open(target); }}>
+        {text}
+      </a>
+    );
+  }
+  if (/^https:\/\//i.test(target)) {
+    return (
+      <a href={target} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 font-medium text-primary underline-offset-2 hover:underline">
+        {text}<ExternalLink className="h-3 w-3" />
+      </a>
+    );
+  }
+  return <>{text}</>;
+}
+
+const LINK = /^\[([^\]]+)\]\(([^)]+)\)$/;
 
 function inline(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) =>
-    part.startsWith('**') && part.endsWith('**') ? <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g).map((part, i) => {
+    const link = LINK.exec(part);
+    return link ? <ChatLink key={i} label={link[1]} target={link[2].trim()} />
+      : part.startsWith('**') && part.endsWith('**') ? <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>
       : part.startsWith('`') && part.endsWith('`') ? <code key={i} className="rounded bg-muted px-1 text-[0.85em]">{part.slice(1, -1)}</code>
-      : <Fragment key={i}>{part}</Fragment>);
+      : <Fragment key={i}>{part}</Fragment>;
+  });
 }
 
 function Markdown({ text }: { text: string }) {
@@ -122,6 +179,8 @@ const SpeechRecognition = (window as unknown as { SpeechRecognition?: new () => 
 // ---- the drawer ---------------------------------------------------------------------------------
 
 export function AgentChat() {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<Saved>(load);
   const agent = useQuery({ queryKey: ['agent'], queryFn: () => api.get<{ provider: AgentProvider }>('/agent'), staleTime: 60_000 });
@@ -150,6 +209,7 @@ export function AgentChat() {
     setState(s => ({ ...s, messages: [...s.messages, { role: 'user', text: message, tools: [] }, { role: 'assistant', text: '', tools: [], pending: true }] }));
     const controller = new AbortController();
     abort.current = controller;
+    let changed = false;
     try {
       const res = await fetch('/api/agent/chat', {
         method: 'POST', headers: { 'content-type': 'application/json' }, signal: controller.signal,
@@ -173,7 +233,10 @@ export function AgentChat() {
           else if (ev.type === 'text') patchLast(m => ({ ...m, text: m.text + ev.text }));
           // a new text block after looking things up starts a new paragraph
           else if (ev.type === 'block') patchLast(m => (m.text && !m.text.endsWith('\n\n') ? { ...m, text: `${m.text}\n\n` } : m));
-          else if (ev.type === 'tool') patchLast(m => ({ ...m, tools: [...m.tools, toolLabel(ev.name ?? '', ev.input)] }));
+          else if (ev.type === 'tool' && ev.name === 'change') {
+            changed = true;
+            patchLast(m => ({ ...m, changes: [...(m.changes ?? []), toolLabel(ev.name!, ev.input)] }));
+          } else if (ev.type === 'tool') patchLast(m => ({ ...m, tools: [...m.tools, toolLabel(ev.name ?? '', ev.input)] }));
           else if (ev.type === 'done') {
             if (ev.sessionId) setState(s => ({ ...s, sessionId: ev.sessionId! }));
             patchLast(m => ({ ...m, pending: false, error: ev.error }));
@@ -187,9 +250,18 @@ export function AgentChat() {
       patchLast(m => ({ ...m, pending: false }));
       abort.current = null;
       setBusy(false);
+      // the agent changed data: everything on screen may be stale. Kiro's text output doesn't report its
+      // tool calls, so after a Kiro answer refresh anyway.
+      if (changed || agent.data?.provider === 'kiro') qc.invalidateQueries({ predicate: q => q.queryKey[0] !== 'scrape' });
       textarea.current?.focus();
     }
   }
+
+  const linkActions: LinkActions = {
+    open: path => { setOpen(false); navigate(path); },
+    reply: text => send(text),
+    busy,
+  };
 
   // askAgent() from another page: open, then send or prefill
   const sendRef = useRef(send);
@@ -257,7 +329,7 @@ export function AgentChat() {
             <span className="icon-tile h-8 w-8 rounded-lg [&_svg]:h-4 [&_svg]:w-4"><Sparkles /></span>
             <div className="min-w-0 flex-1">
               <Dialog.Title className="text-sm font-semibold">שאל על הנתונים</Dialog.Title>
-              <div className="text-xs text-muted-foreground">{provider} · גישת קריאה בלבד לנתוני הבית</div>
+              <div className="text-xs text-muted-foreground">{provider} · קורא ומעדכן את נתוני הבית</div>
             </div>
             {!empty && <button type="button" className="btn-ghost btn-icon" onClick={newChat} aria-label="שיחה חדשה" title="שיחה חדשה"><Plus /></button>}
             <Dialog.Close className="btn-ghost btn-icon" aria-label="סגור"><X /></Dialog.Close>
@@ -267,7 +339,7 @@ export function AgentChat() {
             {empty && (
               <div className="space-y-3 pt-6 text-center">
                 <Sparkles className="mx-auto h-8 w-8 text-primary/70" />
-                <p className="text-muted-foreground">אפשר לשאול כל שאלה על ההכנסות, ההוצאות, התקציב והתחזית.<br />התשובות מבוססות על הנתונים שלך.</p>
+                <p className="text-muted-foreground">אפשר לשאול כל שאלה על ההכנסות, ההוצאות, התקציב והתחזית,<br />או לבקש לעדכן: תקציב, קטגוריה, הוצאה ידנית ועוד.<br />התשובות מבוססות על הנתונים שלך.</p>
                 <div className="flex flex-col gap-2 pt-2">
                   {SUGGESTIONS.map(q => (
                     <button key={q} type="button" className="btn justify-start text-start text-sm" onClick={() => send(q)}>{q}</button>
@@ -288,7 +360,14 @@ export function AgentChat() {
                     ))}
                   </div>
                 )}
-                {m.text && <Markdown text={m.text} />}
+                {m.changes && m.changes.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {[...new Set(m.changes)].map(t => (
+                      <span key={t} className="chip text-[11px] text-amber-700 dark:text-amber-300"><PencilLine className="h-3 w-3" />{t}</span>
+                    ))}
+                  </div>
+                )}
+                {m.text && <LinkContext.Provider value={linkActions}><Markdown text={m.text} /></LinkContext.Provider>}
                 {m.pending && (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <LoaderCircle className="h-3.5 w-3.5 animate-spin" />{m.tools.length ? 'בודק בנתונים…' : 'חושב…'}

@@ -33,6 +33,11 @@ export interface CycleSummary {
   byCategory: CategorySpend[]; byMember: Record<string, { income: number; spend: number }>;
   byBusiness: Record<string, { income: number; spend: number }>;
 }
+/** GET /coverage: how far back the scraped data goes per company; `start` = from when every company has data */
+export interface DataCoverage {
+  start: string | null; limitedBy: string | null; earliest: string | null;
+  companies: { company: string; earliest: string; latest: string; count: number }[];
+}
 export interface BudgetStatus {
   budgetId: number | null; categoryId: number; categoryName: string; parentId: number | null; memberId: number | null; budget: number | null;
   spent: number; pct: number | null; planned: number; projected: number; remaining: number | null; typical: number;

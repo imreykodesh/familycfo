@@ -76,8 +76,11 @@ It understands how Israeli money actually moves:
   - the data chat, if you use it: your questions and the data it reads go to the AI provider you picked in Settings
     (Anthropic, Google or Kiro) through your own CLI login;
   - an optional categorization endpoint you configure (`categoryApiUrl`) receives transaction descriptions.
-- The data chat can only read: a read-only SQL connection, whitelisted GET endpoints of the local API, and (Claude only)
-  the files in `data/` (enforced by a hook that blocks reading anything else). With Gemini or Kiro it has no file access at all.
+- The data chat reads through a read-only SQL connection and whitelisted GET endpoints of the local API, and can change
+  data only through whitelisted endpoints of the same API (budgets, categories, transactions, rules, planned and manual
+  entries, tags and the settings-style tables — never the scrape, bank logins or OTP). It can open only the files in
+  `data/` (Claude only; enforced by a hook that blocks reading anything else) — with Gemini or Kiro it has no file
+  access at all. Back up `bank.db` if you let it make large changes.
 - Log files (`data/logs/`, kept 14 days) hold what the app prints — including scrape errors and the text of the bank's page
   when a login failed. They stay on your machine like the database.
 
@@ -132,8 +135,10 @@ accounts, two cards, a mortgage, savings and a small stock portfolio. Delete `de
    ```
 
    A Chrome window opens for each company (`SHOW_BROWSER=0` for headless). If Bank Hapoalim asks for an SMS code,
-   type it in the terminal. To fetch more history: `SCRAPE_MONTHS=12 npm run scrape` or `SCRAPE_FROM=2025-01-01 npm run scrape`.
-   Some banks and card companies return less history than asked for.
+   type it in the terminal. To fetch more history: `SCRAPE_MONTHS=12 npm run scrape` (or the "כמה חודשים אחורה לעדכן"
+   setting), `SCRAPE_FROM=2025-01-01 npm run scrape`, or `SCRAPE_FROM=max` (also "משיכת היסטוריה מלאה"
+   under the update button) for as much as each company gives — Max about 4 years, Leumi 3, Cal 18 months, most
+   others about a year. **מגמות הוצאות → מקסימום** shows the history from the month every company has data for.
 
 4. **Start the app:**
 
@@ -149,6 +154,23 @@ accounts, two cards, a mortgage, savings and a small stock portfolio. Delete `de
 5. **Categories.** A new database starts with a default Hebrew category tree, and the card companies' own category
    names (e.g. "מזון וצריכה") are mapped to it, so most card rows are categorized right away. Fix the rest on the
    transactions page; "החל על תנועות דומות" saves a rule for next time.
+
+## Local build
+
+`npm run dev` runs from source with hot reload (two ports). To check everything and run the built app in one process:
+
+```bash
+npm run build          # installs what's missing, typechecks, runs the tests, builds the web app to web/dist
+npm run serve          # API + the built UI on http://127.0.0.1:4310
+```
+
+`npm run build -- --clean` reinstalls the packages from scratch first; `-- --skip-tests` skips the tests. The build
+never touches `bank.db`, `accounts.json` or `data/`. Use `BANK_DB=demo.db npm run serve` for the demo.
+
+**Double-click launchers:** `start-windows.cmd` (Windows) and `start-mac.command` (macOS, in Finder) do all of it —
+build, start, open the browser. Close the window to stop the app. They run `npm run app` (`scripts/start.mjs`), which
+takes `--skip-build` (start the last build), `--demo` (the demo household) and `--no-open`. If the app is already
+running they just open it. Native Windows (outside WSL) is less tested than macOS / Linux.
 
 ## Everyday use
 
@@ -182,13 +204,16 @@ Each question starts the tool in a temporary folder with:
 
 - **no built-in tools** — except, for Claude, reading documents, limited by a hook to a copy of `data/`
   (Gemini: `tools.core` allows only `activate_skill`; Kiro: an agent whose only tools are `@household`);
-- a read-only MCP server (`src/agent/mcp.ts`) with two tools: `api` (whitelisted GET endpoints — the same numbers the
-  screens show) and `sql` (`SELECT` only, on a read-only connection);
+- an MCP server (`src/agent/mcp.ts`) with three tools: `api` (whitelisted GET endpoints — the same numbers the
+  screens show), `sql` (`SELECT` only, on a read-only connection) and `change` (POST / PUT / PATCH / DELETE on
+  whitelisted endpoints — the same calls the screens make);
 - its instructions in [`agent/CLAUDE.md`](agent/CLAUDE.md) and skills in [`agent/.claude/skills/`](agent/.claude/skills)
   (monthly review, subscriptions audit, category deep-dive, trip cost, insurance questions, pension and portfolio
   reviews, scrape problems). Edit them to change how it answers — every provider gets the same ones.
 
-The chat never changes data; it tells you where in the app to do it. It gives facts, not investment advice.
+The chat changes data when you ask it to ("set a ₪1,500 budget for restaurants", "move these to groceries", "add a ₪120
+cash expense"); when a change is its own suggestion it asks first, with a one-click button. Its answers link to the
+screen they talk about. It gives facts, not investment advice.
 
 ## Importing pension and insurance reports
 
@@ -217,7 +242,7 @@ Both are idempotent — re-running updates, never duplicates. Policy documents c
 | `AGENT_PROVIDER` | env | the Settings value (`claude`) | Which CLI answers the data chat: `claude`, `gemini` or `kiro`. |
 | `LOG_DIR` / `LOG_KEEP_DAYS` | env | `data/logs` / `14` | Where log files are written and how long they're kept. |
 | `SCRAPE_MONTHS` | env | the Settings value (3) | How many months back a scrape fetches (1–24). Overrides the "כמה חודשים אחורה לעדכן" setting. |
-| `SCRAPE_FROM` | env | 3 months back | Start date of the scrape (`YYYY-MM-DD`), for backfilling. Overrides `SCRAPE_MONTHS`. |
+| `SCRAPE_FROM` | env | 3 months back | Start date of the scrape (`YYYY-MM-DD`), for backfilling; `max` = as far back as each company allows (up to 5 years). Overrides `SCRAPE_MONTHS`. |
 | `SHOW_BROWSER` | env | shown | `SHOW_BROWSER=0` runs Chrome headless. |
 | `SCHEDULE` | env | none | Cron expression; keeps `npm run scrape` running on a schedule. |
 | `POLICIES_DIR` / `REPORTS_DIR` | env | `data/policies` / `data/reports` | Where insurance documents and imported reports are kept. |
@@ -237,12 +262,14 @@ src/
   server/               Fastify API (127.0.0.1) + the data chat runner (Claude / Gemini / Kiro)
   log.ts                log files in data/logs (console + API log), read back for the logs page
   scrapeErrors.ts       a failed scrape in words: what happened and what to do
-  agent/                read-only MCP server and the document-read guard for the chat
+  agent/                the chat's MCP server (read + whitelisted changes) and the document-read guard
   import/               pension and insurance report importers
   demo.ts               the demo household
 web/                    Vite + React + Tailwind, Hebrew RTL
 agent/                  the data chat's instructions (CLAUDE.md) and skills
 tests/                  Vitest, in-memory SQLite
+scripts/build.mjs       `npm run build`: install if needed → typecheck → tests → web/dist
+scripts/start.mjs       `npm run app`: build → serve → open the browser (start-windows.cmd, start-mac.command)
 ```
 
 Architecture notes and the key accounting rules are in [CLAUDE.md](CLAUDE.md) (also handy if you develop with an AI assistant).
