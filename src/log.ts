@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from 'fs';
 import { join, resolve } from 'path';
 import { format } from 'util';
+import { dataPath } from './paths.js';
 
 /**
  * Log files: everything the app prints (console.* and the API's own log) is also appended to
@@ -9,7 +10,7 @@ import { format } from 'util';
  * Files older than LOG_KEEP_DAYS (default 14) are deleted. They are local only, like the database.
  */
 
-export const LOG_DIR = resolve(process.env.LOG_DIR ?? join('data', 'logs'));
+export const LOG_DIR = resolve(process.env.LOG_DIR ?? dataPath('data', 'logs'));
 const KEEP_DAYS = Math.max(1, Number(process.env.LOG_KEEP_DAYS ?? 14) || 14);
 const MAX_READ_BYTES = 2_000_000;
 

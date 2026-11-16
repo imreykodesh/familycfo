@@ -5,10 +5,13 @@ import { api, type AgentProvider, type Rule, type SyncStatus } from '../api';
 import { useLookups } from '../state';
 import { day } from '../format';
 import {
-  CalendarClock, Coins, Layers, Plus, RefreshCw, Settings2, SlidersHorizontal, Sparkles, Tags, Users, Wallet, Wand2, X,
+  BellRing, CalendarClock, Coins, KeyRound, Layers, Plus, RefreshCw, Settings2, SlidersHorizontal, Sparkles, Tags, Users, Wallet, Wand2, X,
 } from 'lucide-react';
+import { desktop } from '../desktop';
+import { BankLoginsEditor, LOGINS_SUBTITLE, SCHEDULE_SUBTITLE, ScrapeScheduleForm } from '../components/BankLogins';
 import { AccountSelect, CategorySelect, MemberSelect, PageHeader, Segmented } from '../components/ui';
 import { companyName } from '../components/ScrapeButton';
+import { GeminiSetup, KiroSetup, ModelPicker } from '../components/AgentSetup';
 
 interface FxRow { currency: string; rate_to_ils: number; date: string; source: string }
 
@@ -71,7 +74,7 @@ export default function Settings() {
                 if (n >= 1 && n <= 24) saveSettings.mutate({ scrape_months_back: String(n) });
                 else e.target.value = meta.settings.scrape_months_back ?? '3';
               }} />
-            <span className="mt-1.5 block text-xs text-zinc-500">בכל לחיצה על ״עדכון נתונים״ (1–24). חלק מהבנקים וחברות האשראי מחזירים פחות היסטוריה.</span>
+            <span className="mt-1.5 block text-xs text-zinc-500">בכל לחיצה על ״עדכון נתונים״ (1–24). בנקים כמו דיסקונט ומזרחי מחזירים לכל היותר 12 חודשים; כרטיסי אשראי — יותר. מה שכבר נשמר נשאר, כך שההיסטוריה מתארכת עם הזמן.</span>
           </label>
         </div>
       </Section>
@@ -86,14 +89,21 @@ export default function Settings() {
             Claude Code (<code dir="ltr">claude</code>) עם המנוי שלך. היחיד שיכול גם לפתוח את מסמכי הביטוח והדוחות שהעלית.
           </>}
           {meta.settings.agent_provider === 'gemini' && <>
-            Gemini CLI: התקנה ב-<code dir="ltr">npm install -g @google/gemini-cli</code>, ואז הרצה אחת של <code dir="ltr">gemini</code> בטרמינל
-            כדי להתחבר עם חשבון Google (או להגדיר <code dir="ltr">GEMINI_API_KEY</code>). העוזר לא פותח מסמכים — רק את הנתונים.
+            Gemini של Google. העוזר לא פותח מסמכים — רק את הנתונים.
           </>}
           {meta.settings.agent_provider === 'kiro' && <>
-            Kiro CLI: התקנה מ-<span dir="ltr">kiro.dev/cli</span>, ומפתח API של Kiro במשתנה <code dir="ltr">KIRO_API_KEY</code> לפני
-            <code dir="ltr"> npm run dev</code> (מצב לא-אינטראקטיבי דורש מפתח). העוזר לא פותח מסמכים — רק את הנתונים.
+            Kiro עם החשבון שלך. העוזר לא פותח מסמכים — רק את הנתונים.
           </>}
         </div>
+        <div className="mt-3">
+          {meta.settings.agent_provider === 'gemini' && <GeminiSetup />}
+          {meta.settings.agent_provider === 'kiro' && <KiroSetup />}
+        </div>
+        {(() => {
+          const provider = (meta.settings.agent_provider ?? 'claude') as AgentProvider;
+          const key = `agent_model_${provider}`;
+          return <ModelPicker key={provider} provider={provider} value={meta.settings[key] ?? ''} onChange={id => saveSettings.mutate({ [key]: id })} />;
+        })()}
       </Section>
 
       <Section id="members" title="בני הבית" icon={Users} color="var(--chart-6)" subtitle="השמות והצבעים שמופיעים בכל האפליקציה. ״משותף״ הוא ברירת המחדל לחשבונות ותנועות של כל הבית.">
@@ -170,6 +180,18 @@ export default function Settings() {
           <button className="btn" disabled={!newTag.trim()} onClick={() => { create.mutate({ path: '/tags', body: { name: newTag.trim() } }); setNewTag(''); }}><Plus />הוסף</button>
         </div>
       </Section>
+
+      {desktop && (
+        <Section id="bank-logins" title="חשבונות בנק וכרטיסי אשראי" icon={KeyRound} color="var(--chart-2)" subtitle={LOGINS_SUBTITLE}>
+          <BankLoginsEditor />
+        </Section>
+      )}
+      {desktop && (
+        <Section id="schedule" title="סריקה אוטומטית והתראות" icon={BellRing} color="var(--chart-3)" subtitle={SCHEDULE_SUBTITLE}>
+          <ScrapeScheduleForm settings={meta.settings} save={b => saveSettings.mutate(b)} />
+          <p className="mt-3 text-xs text-zinc-500">FamilyCFO {desktop.version} · <Link className="underline" to="/welcome">אשף ההגדרה</Link></p>
+        </Section>
+      )}
 
       <Section title="מצב סריקות" icon={RefreshCw} color="var(--chart-7)" subtitle="הסבר מלא, היסטוריה וקובץ היומן — בעמוד יומן ותקלות.">
         <div className="scroll-x card-bleed"><table className="table">

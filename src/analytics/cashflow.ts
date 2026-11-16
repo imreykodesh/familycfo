@@ -87,7 +87,7 @@ export function cashflowHistory(db: DB, opts: TxFilter & { cycles?: number; asOf
   return recentCycles(opts.asOf ?? today(), opts.cycles ?? 6, cycleStartDay(db)).map(c => summarizeCycle(txs, c));
 }
 
-export interface DataCoverage {
+export interface HistoryRange {
   /** the latest of the companies' first dates: from here on every company has data (null = no scraped rows) */
   start: string | null;
   /** the company whose history starts last — the one that limits `start` */
@@ -102,7 +102,7 @@ export interface DataCoverage {
  * Installments are dated by their charge date, so an old purchase paid in installments doesn't
  * stretch a card's history back to the purchase.
  */
-export function dataCoverage(db: DB): DataCoverage {
+export function historyRange(db: DB): HistoryRange {
   const companies = db.prepare(`
     SELECT a.company AS company,
       MIN(CASE WHEN t.txn_type = 'installments' THEN COALESCE(t.processed_date, t.date) ELSE t.date END) AS earliest,
@@ -110,10 +110,10 @@ export function dataCoverage(db: DB): DataCoverage {
     FROM transactions t JOIN accounts a ON a.id = t.account_id
     WHERE a.kind IN ('bank', 'card') AND a.active = 1
     GROUP BY a.company ORDER BY earliest
-  `).all() as DataCoverage['companies'];
+  `).all() as HistoryRange['companies'];
   // the scraper stores instants (e.g. 2026-05-31T21:00:00.000Z = 1 June in Israel) — compare local days
   for (const c of companies) { c.earliest = localDate(c.earliest); c.latest = localDate(c.latest); }
-  const last = companies.reduce<DataCoverage['companies'][number] | null>((m, c) => (!m || c.earliest > m.earliest ? c : m), null);
+  const last = companies.reduce<HistoryRange['companies'][number] | null>((m, c) => (!m || c.earliest > m.earliest ? c : m), null);
   return { start: last?.earliest ?? null, limitedBy: last?.company ?? null, earliest: companies[0]?.earliest ?? null, companies };
 }
 

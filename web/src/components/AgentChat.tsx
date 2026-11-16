@@ -57,7 +57,7 @@ const PATH_LABELS: Record<string, string> = {
   recommendations: 'המלצות', 'recommendations/state': 'המלצות', alerts: 'התראות', categories: 'קטגוריות', meta: 'הגדרות',
   settings: 'הגדרות', rules: 'כללי סיווג', tags: 'אירועים ותגיות', events: 'אירועים', scheduled: 'קבועות', funds: 'קופות חיסכון',
   assets: 'נכסים', 'asset-snapshots': 'שווי נכס', liabilities: 'הלוואות', 'liability-snapshots': 'יתרת הלוואה', members: 'בני הבית',
-  accounts: 'חשבונות', businesses: 'עסקים', links: 'קישור החזר', pipeline: 'סיווג מחדש', coverage: 'טווח הנתונים',
+  accounts: 'חשבונות', businesses: 'עסקים', links: 'קישור החזר', pipeline: 'סיווג מחדש', coverage: 'טווח הנתונים', 'history-range': 'טווח ההיסטוריה', 'balance-history': 'היסטוריית יתרות',
   insurance: 'ביטוחים', pension: 'פנסיה וגמל', investments: 'תיק ההשקעות', 'investments/holdings': 'תיק ההשקעות',
   'sync-status': 'מצב העדכונים', 'scrape/runs': 'היסטוריית עדכונים', logs: 'קובץ היומן',
 };

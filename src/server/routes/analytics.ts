@@ -1,16 +1,19 @@
 import type { FastifyInstance } from 'fastify';
 import type { DB } from '../../db/connection.js';
 import { addDays, cycleByKey, cycleFor, cycleStartDay, filterTx, loadTransactions, today } from '../../analytics/common.js';
-import { cashflowHistory, cycleSummary, cyclesSince, dataCoverage, expectedIncome, monthIncome } from '../../analytics/cashflow.js';
+import { cashflowHistory, cycleSummary, cyclesSince, expectedIncome, historyRange, monthIncome } from '../../analytics/cashflow.js';
 import { budgetStatus } from '../../analytics/budgets.js';
 import { buildForecast, bankBalances, planningPeriod } from '../../analytics/forecast.js';
 import { installmentPlans, upcomingCardCharges } from '../../analytics/cards.js';
 import { savingsCapacity, tightMonthPlan } from '../../analytics/planning.js';
 import { buildRecommendations } from '../../analytics/recommendations.js';
 import { netWorth } from '../../analytics/networth.js';
+import { balanceHistory, dataCoverage } from '../../analytics/balances.js';
 import { refreshPrices } from './investments.js';
 import { runPipeline } from '../../pipeline.js';
+import { SCRAPERS } from 'israeli-bank-scrapers';
 import { scrapeState, startScrape, submitOtp } from '../scrapeJob.js';
+import { downloadState, findBrowser, startBrowserDownload } from '../../browser.js';
 import { toApi } from '../crud.js';
 import { monthPlan } from '../../analytics/commitments.js';
 import { parseFilter } from './transactions.js';
@@ -62,10 +65,10 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
     return monthIncome(db, parseFilter(q), q.cycle ? cycleByKey(q.cycle, startDay) : cycleFor(today(), startDay));
   });
 
-  // cycles=max: from the month every bank / card company has data for (see /api/coverage)
+  // cycles=max: from the month every bank / card company has data for (see /api/history-range)
   app.get('/api/cashflow', async req => {
     const q = req.query as Q;
-    const start = q.cycles === 'max' ? dataCoverage(db).start : null;
+    const start = q.cycles === 'max' ? historyRange(db).start : null;
     const cycles = q.cycles === 'max' ? (start ? cyclesSince(start, today(), cycleStartDay(db)) : 6) : Number(q.cycles ?? 6);
     return cashflowHistory(db, { ...parseFilter(q), cycles: Math.min(Math.max(1, cycles || 6), MAX_CYCLES) });
   });
@@ -87,7 +90,7 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
       }), `cashflow-${cycles}-months.csv`);
   });
   /** How far back the scraped history goes, per company, and from when all of them have data. */
-  app.get('/api/coverage', async () => dataCoverage(db));
+  app.get('/api/history-range', async () => historyRange(db));
 
   app.get('/api/forecast', async req => {
     const q = req.query as Q;
@@ -152,6 +155,14 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
     return { ok: true };
   });
 
+  // each bank account's balance month by month (daily=1: every day), rebuilt from its rows back from the current balance
+  app.get('/api/balance-history', async req => {
+    const q = req.query as Record<string, string | undefined>;
+    return balanceHistory(db, { account: q.account || undefined, from: q.from || undefined, to: q.to || undefined, daily: q.daily === '1' });
+  });
+  // the first / last date the database has rows for, per account
+  app.get('/api/coverage', async () => dataCoverage(db));
+
   app.get('/api/networth', async () => {
     await refreshPrices(db, 5 * 60_000);
     return netWorth(db);
@@ -197,8 +208,28 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
     ...scrapeState(),
     lastSuccessAt: db.prepare(`SELECT MAX(finished_at) FROM scrape_runs WHERE success = 1`).pluck().get() as string | null,
   }));
-  // body { from?: 'max' | 'YYYY-MM-DD' } — a backfill; default the last 3 months
-  app.post('/api/scrape', async req => startScrape(db, { from: (req.body as { from?: string } | undefined)?.from || undefined }));
+  // body { showBrowser?, from?: 'max' | 'YYYY-MM-DD' } — from: a backfill; default the months-back setting
+  app.post('/api/scrape', async req => {
+    const body = (req.body ?? {}) as { showBrowser?: unknown; from?: unknown };
+    return startScrape(db, {
+      showBrowser: typeof body.showBrowser === 'boolean' ? body.showBrowser : undefined,
+      from: typeof body.from === 'string' && body.from ? body.from : undefined,
+    });
+  });
+  // the browser the scraper drives: an installed one, or Chrome for Testing downloaded into the data folder
+  app.get('/api/browser', async () => ({ found: await findBrowser(), download: downloadState() }));
+  app.post('/api/browser/download', async () => startBrowserDownload());
+
+  // the banks / card companies the scraper supports and the names of their login fields (no values) — for the
+  // desktop app's bank-accounts form
+  app.get('/api/scrape/companies', async () => Object.entries(SCRAPERS)
+    .map(([id, s]) => ({ id, name: s.name, loginFields: s.loginFields.map(String) })));
+  // the desktop app checks a login right after it is saved: log in, read a few days, save nothing
+  app.post('/api/scrape/check', async (req, reply) => {
+    const loginId = String((req.body as { loginId?: unknown })?.loginId ?? '');
+    if (!/^[\w-]{8,64}$/.test(loginId)) return reply.code(400).send({ error: 'loginId is required' });
+    return startScrape(db, { loginIds: [loginId], checkOnly: true });
+  });
   app.post('/api/scrape/otp', async req => {
     submitOtp(String((req.body as { code?: unknown })?.code ?? '').trim());
     return { ok: true };

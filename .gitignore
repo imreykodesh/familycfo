@@ -16,3 +16,10 @@ data/
 # local tool settings
 .claude/settings.local.json
 .DS_Store
+
+# the desktop app's bundles and packaged builds
+build/
+release/
+# API keys saved from the app (Settings -> AI assistant)
+secrets/
+setup/

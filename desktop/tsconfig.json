@@ -1,0 +1,6 @@
+{
+  "//": "typecheck only (npm run typecheck): the desktop app with the server code it imports; desktop/build.mjs bundles it",
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "rootDir": "..", "noEmit": true },
+  "include": [".", "../src"]
+}

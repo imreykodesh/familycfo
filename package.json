@@ -1,12 +1,12 @@
 {
   "name": "familycfo",
-  "version": "1.0.0",
+  "version": "1.1.4",
   "description": "FamilyCFO — a local-first CFO for Israeli families: scrapes your banks and credit cards, then shows cash flow, budgets, forecast, net worth, insurance, pension and a stock portfolio, with an optional AI chat over your own data.",
   "license": "MIT",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "postinstall": "npm --prefix web install",
@@ -20,27 +20,34 @@
     "import:insurance": "tsx src/import/insurancePolicies.ts",
     "pipeline": "tsx src/pipeline.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p desktop/tsconfig.json",
+    "check": "node scripts/check.mjs",
     "demo": "tsx src/demo.ts",
     "dev:demo": "BANK_DB=demo.db npm run dev",
-    "build": "node scripts/build.mjs",
-    "serve": "tsx src/server/index.ts --serve-web",
-    "app": "node scripts/start.mjs"
+    "desktop:bundle": "node desktop/build.mjs",
+    "desktop:dev": "npm --prefix web run build && npm run desktop:bundle && electron .",
+    "desktop:pack": "npm --prefix web run build && npm run desktop:bundle && (electron-builder --dir --publish never; s=$?; npm rebuild better-sqlite3; exit $s)",
+    "desktop:dist": "npm --prefix web run build && npm run desktop:bundle && (electron-builder --publish never -c.mac.notarize=true; s=$?; npm rebuild better-sqlite3; exit $s)"
   },
   "dependencies": {
-    "@fastify/static": "^10.1.11",
-    "better-sqlite3": "^11.7.0",
+    "@puppeteer/browsers": "^2.13.2",
+    "better-sqlite3": "^13.0.3",
+    "electron-updater": "^6.8.9",
     "fastify": "^5.12.5",
-    "israeli-bank-scrapers": "^6.12.2",
+    "israeli-bank-scrapers": "^6.13.0",
     "node-cron": "^3.0.3",
     "puppeteer": "^24.37.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@google/gemini-cli": "0.68.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
     "@types/node-cron": "^3.0.11",
     "concurrently": "^9.2.1",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^4.0.2"
@@ -49,5 +56,11 @@
     "israeli-bank-scrapers": {
       "puppeteer": "$puppeteer"
     }
-  }
+  },
+  "main": "build/desktop/main.cjs",
+  "productName": "FamilyCFO",
+  "author": {
+    "name": "Niso Mazuz"
+  },
+  "homepage": "https://github.com/nmazuz/familycfo"
 }

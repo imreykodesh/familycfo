@@ -21,15 +21,14 @@ Experiment on a copy of a real database, never on the original: `BANK_DB=copy.db
 ## Checks
 
 ```bash
-npm test
-npm run typecheck
-npm --prefix web run typecheck
+npm run check    # installs what's missing, typechecks the API, the desktop app and the web UI, runs the tests
 ```
 
 Add or update tests in `tests/` for logic changes (they use an in-memory SQLite, see `tests/helpers.ts`).
 
 ## Conventions
 
+- Read [PROJECT_MAP.md](PROJECT_MAP.md) — where everything is — and update it with your change.
 - Read [CLAUDE.md](CLAUDE.md) — the architecture and the accounting rules (what counts as spend, card bills,
   transfers, installments, manual edits) that every change must keep.
 - Schema changes: a new numbered migration at the end of `src/db/migrations.ts`. Never edit a released migration.

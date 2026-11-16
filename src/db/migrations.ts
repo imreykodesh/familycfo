@@ -635,12 +635,35 @@ export const migrations: Migration[] = [
   },
   {
     version: 15,
+    name: 'alerts: when the desktop app showed them as a notification',
+    up(db) {
+      db.exec(`ALTER TABLE alerts ADD COLUMN notified_at TEXT`);
+      // the alerts that already exist were seen in the app; only new ones become notifications
+      db.exec(`UPDATE alerts SET notified_at = CURRENT_TIMESTAMP`);
+    },
+  },
+  {
+    version: 16,
     name: 'scrape run diagnostics',
     up(db) {
-      // what the bank's page showed when a failed scrape closed it, and the period that was asked for
-      db.exec(`ALTER TABLE scrape_runs ADD COLUMN page_state TEXT`);
-      db.exec(`ALTER TABLE scrape_runs ADD COLUMN start_date TEXT`);
+      // what the bank's page showed when a failed scrape closed it, and the period that was asked for.
+      // A database made by main before the desktop app was merged ran this as version 15 — skip what it already has.
+      const have = columns(db, 'scrape_runs');
+      if (!have.includes('page_state')) db.exec(`ALTER TABLE scrape_runs ADD COLUMN page_state TEXT`);
+      if (!have.includes('start_date')) db.exec(`ALTER TABLE scrape_runs ADD COLUMN start_date TEXT`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_scrape_runs_company ON scrape_runs(company, id)`);
+    },
+  },
+  {
+    version: 17,
+    name: 'alerts notified_at for databases that numbered scrape diagnostics 15',
+    up(db) {
+      // main (before the desktop app was merged) used version 15 for the scrape diagnostics, so such a database
+      // never ran the alerts migration above
+      if (!columns(db, 'alerts').includes('notified_at')) {
+        db.exec(`ALTER TABLE alerts ADD COLUMN notified_at TEXT`);
+        db.exec(`UPDATE alerts SET notified_at = CURRENT_TIMESTAMP`);
+      }
     },
   },
 ];

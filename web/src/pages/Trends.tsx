@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChartColumn, ChevronLeft, TrendingDown, TrendingUp } from 'lucide-react';
-import { api, qs, type CycleSummary, type DataCoverage } from '../api';
+import { api, qs, type CycleSummary, type HistoryRange } from '../api';
 import { useFilters, useLookups } from '../state';
 import { monthName, todayIso } from '../format';
 import { Empty, ErrorBox, Loading, Money, PageHeader, SectionTitle, Segmented } from '../components/ui';
@@ -42,7 +42,7 @@ export default function Trends() {
 
   const query = { ...params, cycles: cycles === MAX ? 'max' : cycles };
   const history = useQuery({ queryKey: ['cashflow', query], queryFn: () => api.get<CycleSummary[]>(`/cashflow${qs(query)}`) });
-  const coverage = useQuery({ queryKey: ['coverage'], queryFn: () => api.get<DataCoverage>('/coverage'), enabled: cycles === MAX });
+  const coverage = useQuery({ queryKey: ['history-range'], queryFn: () => api.get<HistoryRange>('/history-range'), enabled: cycles === MAX });
   const { isLoading, error } = history;
   // drop the empty months before the data starts (before the first scrape)
   const data = useMemo(() => {

@@ -7,7 +7,7 @@ import { installFileLog } from './log.js';
 
 installFileLog('scrape');
 
-const config = loadConfig();
+const config = await loadConfig();
 
 async function run(cfg: Config): Promise<void> {
   const db = getDb();

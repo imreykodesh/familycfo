@@ -2,19 +2,23 @@
 
 Guidance for AI coding agents working in this repository (same content as CLAUDE.md).
 
+**Before any task read [PROJECT_MAP.md](PROJECT_MAP.md)** (files, screens, API routes, tables, settings / storage keys, scripts) and keep it up to date in the same task. Working rules: `.kiro/steering/` (also `.cursor/rules`) — answer the user in Hebrew, check with `npm run check`, everything ends on `main`.
+
 ## Commands
 
 ```bash
 npm run scrape     # Scrape all banks once, then run the pipeline (SCRAPE_ONLY=isracard,max to limit; months back = SCRAPE_MONTHS ?? setting scrape_months_back ?? 3; SCRAPE_FROM=2026-01-01 to backfill, SCRAPE_FROM=max for as much history as each company gives; SHOW_BROWSER=0 headless; SCHEDULE="0 7 * * *" to keep running on cron)
 npm run dev        # Household app: API (127.0.0.1:4310) + web UI (http://127.0.0.1:5180)
-npm run build      # Local build (scripts/build.mjs): install if needed → typecheck → tests → web/dist (-- --clean, -- --skip-tests)
-npm run serve      # The built app on one port: API + web/dist on http://127.0.0.1:4310 (--serve-web / SERVE_WEB=1)
-npm run app        # build → serve → open the browser (scripts/start.mjs; what start-windows.cmd / start-mac.command run)
 npm run pipeline   # Re-run classification / recurring / suggestions / alerts without scraping
 npm run migrate    # Apply DB migrations (also runs automatically on open)
 npm test           # Vitest unit tests (in-memory SQLite)
 npm run typecheck  # API typecheck; web: npm --prefix web run typecheck
+npm run check      # The gate before a commit (scripts/check.mjs): install if needed → typecheck API + desktop + web → tests (-- --clean, -- --skip-tests)
 npm run demo       # Build demo.db with made-up data; npm run dev:demo runs the app on it
+npm run desktop:dev   # The desktop app (Electron) from source: builds web/dist + bundles, data in "<appData>/FamilyCFO (dev)" (BANK_DB=demo.db to use the demo)
+npm run desktop:pack  # Unpacked app in release/ for this OS; desktop:dist = installers (mac dmg/zip, win nsis, linux AppImage/deb)
+build-windows.cmd     # Double-click on Windows: typecheck → web build → desktop bundle → release\FamilyCFO-<version>-x64.exe
+# Release: bump package.json version, push tag vX.Y.Z → .github/workflows/desktop.yml builds mac/win/linux on their own OS and uploads to a draft GitHub Release
 ```
 
 ## Architecture
@@ -31,9 +35,12 @@ Israeli bank scraper + local household-finance app for a family (members are con
 - Insurance (`src/server/routes/insurance.ts`, page `/insurance`): policies + documents; files in `data/policies/<policy id>/` (git-ignored, `POLICIES_DIR` overrides). Actual cost = charges matching the policy's `match_pattern` (and `payment_account_id`, when set) in the last 12 months. Bulk import from a JSON spec (fields + documents + asset values): `npm run import:insurance -- data/reports/<file>.json` (idempotent). The chat reads documents with `Read`, limited to a `docs/` copy of `data/policies` + `data/reports` by a PreToolUse hook (`src/agent/guard-read.mjs`, symlinks resolved).
 - Pension & long-term savings (`/pension`, `src/server/routes/pension.ts`): pension / study / provident funds are `assets` (types `pension`, `keren_hishtalmut`, `kupat_gemel`) with report fields (status, employer, fees, `details` JSON: tracks + returns, components, coverages), `asset_deposits` and `pension_reports` (the report's own totals). Imported from a report extracted to JSON: `npm run import:pension -- data/reports/<file>.json` (idempotent; the PDF and JSON stay in git-ignored `data/reports/`). A study fund is liquid 6 years from joining; a provident fund without a liquidity date isn't liquid.
 - Stock-market investments (`/investments`, `src/server/routes/investments.ts`): `holdings` (symbol, quantity, optional buy price / date; no buy price → `baseline_price` = the price when added, the yield runs from it; `manual_price` for something with no quote). Live prices from Yahoo Finance (`src/analytics/quotes.ts`, only symbols are sent; TASE quotes in agorot → stored in ₪) cached in `quotes` (refreshed when older than a minute on page load, 5 min for `/networth`, and in the pipeline), daily closes in `quote_history` (from each holding's start; Yahoo FX rates fill days BOI hasn't published, never replace them). Valuation in `src/analytics/investments.ts`; net worth adds one `brokerage` item per broker + owner, and the closes to its month-end history.
-- Logs & scrape problems: `src/log.ts` mirrors console.* and the Fastify log into `data/logs/<server|scrape>-YYYY-MM-DD.log` (14 days); `src/scrapeErrors.ts` turns an error type / message / the bank page's text into a Hebrew explanation; `scrape_runs` keeps `page_state` and `start_date` (migration 15). Page `/logs`, API `/api/scrape/runs`, `/api/logs`.
+- Logs & scrape problems: `src/log.ts` mirrors console.* and the Fastify log into `data/logs/<server|scrape>-YYYY-MM-DD.log` (14 days); `src/scrapeErrors.ts` turns an error type / message / the bank page's text into a Hebrew explanation; `scrape_runs` keeps `page_state` and `start_date` (migration 16; 17 repairs databases made by main when that was 15). Page `/logs`, API `/api/scrape/runs`, `/api/logs`.
 - Chat providers: `agent_provider` setting (or `AGENT_PROVIDER`) = `claude` (default) | `gemini` | `kiro`. Gemini runs headless stream-json in `<tmp>/household-agent-gemini` (`.gemini/settings.json`: `tools.core: ["activate_skill"]`, trusted household MCP only, `GEMINI_SYSTEM_MD`); Kiro runs `kiro-cli chat --v3 --no-interactive --agent household` in `<tmp>/household-agent-kiro/<uuid>` (agent `tools: ["@household"]`, plain-text output, `--resume` per folder). Neither gets file access, so documents are Claude-only. All three get the `change` tool; Kiro reports no tool calls, so the UI refreshes after every Kiro answer. Session ids are prefixed `gemini-` / `kiro-`.
 - `src/server/scrapeJob.ts` — scrape started from the overview button (one at a time, in memory); the Hapoalim OTP is answered via `POST /api/scrape/otp`.
+- Desktop app (`desktop/`, Electron; macOS, Windows, Linux): `main.ts` forks the server (`src/server/desktop.ts`: API + built UI on 127.0.0.1:4330 via `startServer({ webDist })` in `src/server/app.ts`, daily scrape `scheduler.ts`, daily DB backup, alert notifications) and talks to it over IPC (`desktopProtocol.ts`); window closes to the tray/menu bar. Paths come from `src/paths.ts` (`HOUSEHOLD_HOME` = `<userData>/household`, `HOUSEHOLD_APP_DIR` = resources). Bank logins: `desktop/credentials.ts`, `<userData>/credentials.json` = clear index (field names) + values encrypted by `safeStorage` (Keychain / DPAPI / libsecret), or a master password (`vault.ts`, scrypt + AES-GCM) where Linux has no keyring; decrypted only in main when a scrape asks (`setConfigProvider` in `src/config.ts`), never sent over HTTP or to the UI (`window.familycfo` in `desktop/preload.ts` only writes / lists names). First run: native import-or-fresh dialog, then the `/welcome` wizard (members → logins, each checked with `POST /api/scrape/check` = log in only, nothing saved → schedule). The build (`desktop/build.mjs`) neutralises the `import.meta.url === file://argv[1]` CLI guards — keep that pattern for CLI entry points. Packaging rebuilds better-sqlite3 for Electron, then the scripts rebuild it for the system Node.
+- Scrape browser (`src/browser.ts`): an installed Chrome / Chromium / Edge, else Chrome for Testing downloaded into `<data>/browser` from Settings or the wizard (`GET /api/browser`, `POST /api/browser/download`); no browser → the scrape is refused before any login is decrypted.
+- The API rejects non-loopback `Host` and foreign `Origin` headers (`src/server/web.ts`: DNS rebinding / CSRF from other pages).
 - `web/` — Vite + React + Tailwind, Hebrew RTL. Global filter (member / business / tags) in `state.tsx`. Its TS config is `web/tsconfig.app.json`.
 
 **Key rules:**
