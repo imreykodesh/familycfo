@@ -86,13 +86,13 @@ export default function Settings() {
           options={[{ value: 'claude', label: 'Claude' }, { value: 'gemini', label: 'Gemini' }, { value: 'kiro', label: 'Kiro' }]} />
         <div className="mt-3 max-w-3xl text-sm leading-relaxed text-zinc-500">
           {(meta.settings.agent_provider ?? 'claude') === 'claude' && <>
-            Claude Code (<code dir="ltr">claude</code>) עם המנוי שלך. היחיד שיכול גם לפתוח את מסמכי הביטוח והדוחות שהעלית.
+            Claude Code (<code dir="ltr">claude</code>) עם המנוי שלך. פותח גם את מסמכי הביטוח והדוחות שהעלית, כולל סריקות ותמונות.
           </>}
           {meta.settings.agent_provider === 'gemini' && <>
-            Gemini של Google. העוזר לא פותח מסמכים — רק את הנתונים.
+            Gemini של Google. פותח גם את מסמכי הביטוח והדוחות שהעלית, כולל סריקות ותמונות.
           </>}
           {meta.settings.agent_provider === 'kiro' && <>
-            Kiro עם החשבון שלך. העוזר לא פותח מסמכים — רק את הנתונים.
+            Kiro עם החשבון שלך. פותח גם את מסמכי הביטוח והדוחות שהעלית (קובצי PDF דיגיטליים; סריקה או צילום — רק עם Claude או Gemini).
           </>}
         </div>
         <div className="mt-3">

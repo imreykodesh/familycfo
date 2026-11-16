@@ -8,14 +8,29 @@
  *           so every change goes through the app's own rules (manual edits marked as manual, aliases, re-matching).
  *           Never the scrape, the bank OTP, the chat itself or document uploads (pension/import takes the JSON the
  *           agent extracted from a report the user uploaded).
+ *   read_document: (Gemini / Kiro — Claude has its own Read, limited by a hook) open an insurance document or an
+ *           uploaded report from data/policies or data/reports, and nothing else. Gemini gets the file itself (it reads
+ *           PDFs and images natively, scans too); Kiro gets the PDF's text layer, since it can't take files from an MCP tool.
  */
 import Database from 'better-sqlite3';
+import { readFileSync, realpathSync, statSync } from 'fs';
+import { extname, join, sep } from 'path';
 import { createInterface } from 'readline';
 
 const DB_PATH = process.env.BANK_DB ?? 'bank.db';
 const API = process.env.HOUSEHOLD_API ?? 'http://127.0.0.1:4310';
 const MAX_ROWS = 300;
 const MAX_CHARS = 60_000;
+
+/** gemini | kiro: offer read_document (unset for Claude, which uses Read) */
+const DOC_MODE = process.env.HOUSEHOLD_DOC_MODE;
+const DOC_DIRS: Record<string, string | undefined> = { policies: process.env.HOUSEHOLD_POLICIES_DIR, reports: process.env.HOUSEHOLD_REPORTS_DIR };
+/** Gemini takes inline files up to ~20 MB per request */
+const MAX_INLINE = 15 * 1024 * 1024;
+const DOC_MIME: Record<string, string> = {
+  '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
+  '.md': 'text/markdown', '.txt': 'text/plain', '.json': 'application/json',
+};
 
 const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
 db.pragma('query_only = ON');
@@ -38,7 +53,7 @@ const WRITE_PATHS = new RegExp('^/(' + [
 ].join('|') + ')$');
 const AGENT_SETTINGS = ['cycle_start_day', 'balance_buffer', 'scrape_months_back'];
 
-const TOOLS = [
+const TOOLS: { name: string; description: string; inputSchema: object }[] = [
   {
     name: 'api',
     description: `GET an endpoint of the household API (JSON). Prefer it: the numbers match the app's screens.
@@ -91,6 +106,20 @@ POST /categories {"name":"חוגים","parentId":3}.`,
   },
 ];
 
+const READ_DOCUMENT = {
+  name: 'read_document',
+  description: `Open an insurance document or an uploaded / imported report — the only files you can open.
+path: as given by the API (/insurance policies[].documents[].path, /pension report.documentPath) or by the user's message,
+e.g. "docs/reports/pension-2026.pdf" or "docs/policies/3/12-policy.pdf".
+pages (PDF, optional): e.g. "1-5" or "2,7-9" — for a long document read the first pages (contents / summary), then what you need.`,
+  inputSchema: {
+    type: 'object',
+    properties: { path: { type: 'string' }, pages: { type: 'string', description: 'e.g. 1-5' } },
+    required: ['path'],
+  },
+};
+if (DOC_MODE) TOOLS.push(READ_DOCUMENT);
+
 const clip = (s: string) => (s.length > MAX_CHARS ? `${s.slice(0, MAX_CHARS)}\n…[truncated — narrow the request]` : s);
 
 async function callApi(path: string): Promise<string> {
@@ -140,6 +169,75 @@ function runSql(query: string): string {
   return clip(JSON.stringify({ rows, truncated: rows.length >= MAX_ROWS }));
 }
 
+type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
+  | { type: 'resource'; resource: { uri: string; mimeType: string; blob: string } };
+
+/** The file behind docs/policies/… or docs/reports/…, only if it really is inside that folder (symlinks resolved). */
+function documentFile(path: string): string {
+  const parts = path.trim().replace(/\\/g, '/').replace(/^\.?\/+/, '').replace(/^docs\//, '').split('/').filter(Boolean);
+  const base = DOC_DIRS[parts[0] ?? ''];
+  if (!base || parts.length < 2 || parts.includes('..')) throw new Error('only files in docs/policies/ and docs/reports/ can be opened');
+  let root: string, file: string;
+  try { root = realpathSync(base); } catch { throw new Error('there are no documents yet'); }
+  try { file = realpathSync(join(root, ...parts.slice(1))); } catch { throw new Error(`${path} does not exist`); }
+  if (!file.startsWith(root + sep) || !statSync(file).isFile()) throw new Error('only files in docs/policies/ and docs/reports/ can be opened');
+  return file;
+}
+
+/** "2,4-6" → [2, 4, 5, 6] within 1..total; nothing → all pages. */
+function pageList(spec: string | undefined, total: number): number[] {
+  if (!spec?.trim()) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = new Set<number>();
+  for (const part of spec.split(',')) {
+    const [a, b] = part.split('-').map(n => Number(n.trim()));
+    if (!Number.isInteger(a)) continue;
+    for (let p = a; p <= (Number.isInteger(b) ? b : a); p++) if (p >= 1 && p <= total) pages.add(p);
+  }
+  return [...pages].sort((x, y) => x - y);
+}
+
+/** The PDF's text layer, page by page (empty for a scan). */
+async function pdfText(data: Buffer, spec: string | undefined): Promise<{ total: number; pages: { page: number; text: string }[] }> {
+  const { getDocumentProxy } = await import('unpdf');
+  const pdf = await getDocumentProxy(new Uint8Array(data));
+  const pages = [];
+  for (const page of pageList(spec, pdf.numPages)) {
+    const content = await (await pdf.getPage(page)).getTextContent();
+    // table cells are separate items: keep them apart
+    const text = content.items.map(item => ('str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '')).join('')
+      .replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
+    pages.push({ page, text });
+  }
+  return { total: pdf.numPages, pages };
+}
+
+const CANT_SEE = `This setup (Kiro) can only read text: tell the user in Hebrew that this file is a photo or a scan, which Kiro can't read,
+and that it works if they pick Claude or Gemini in Settings → עוזר AI, or upload the original PDF the bank / agent / insurer sent (not a scan).`;
+
+async function readDocument(path: string, pages: string | undefined): Promise<Content[]> {
+  const file = documentFile(path);
+  const mime = DOC_MIME[extname(file).toLowerCase()];
+  if (!mime) throw new Error('unsupported file type');
+  const data = readFileSync(file);
+  if (mime.startsWith('text/') || mime === 'application/json') return [{ type: 'text', text: clip(data.toString('utf8')) }];
+
+  // Gemini reads the file itself (layout, tables, scans) — unless it is too big to send, then the text layer
+  if (DOC_MODE === 'gemini' && data.length <= MAX_INLINE) {
+    const head = { type: 'text' as const, text: `${path} (${mime}, ${Math.round(data.length / 1024)} KB) follows.` };
+    return mime === 'application/pdf'
+      ? [head, { type: 'resource', resource: { uri: `file:///${encodeURIComponent(path)}`, mimeType: mime, blob: data.toString('base64') } }]
+      : [head, { type: 'image', data: data.toString('base64'), mimeType: mime }];
+  }
+  if (mime !== 'application/pdf') {
+    return [{ type: 'text', text: DOC_MODE === 'gemini' ? 'The image is too large to open (over 15 MB).' : CANT_SEE }];
+  }
+  const { total, pages: list } = await pdfText(data, pages);
+  if (!list.length) throw new Error(`no such pages — the document has ${total}`);
+  const body = list.map(p => `--- page ${p.page} of ${total} ---\n${p.text || '(no text on this page)'}`).join('\n\n');
+  const scanned = list.every(p => p.text.length < 20);
+  return [{ type: 'text', text: scanned && DOC_MODE !== 'gemini' ? `${body}\n\n${CANT_SEE}` : clip(`${path}: ${total} pages, text layer.\n\n${body}`) }];
+}
+
 type Msg = { jsonrpc: '2.0'; id?: number | string; method?: string; params?: Record<string, any> };
 const send = (msg: object): void => { process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...msg })}\n`); };
 
@@ -159,6 +257,9 @@ async function handle(msg: Msg): Promise<void> {
     case 'tools/call': {
       const { name, arguments: args = {} } = msg.params ?? {};
       try {
+        if (name === 'read_document' && DOC_MODE) {
+          return send({ id: msg.id, result: { content: await readDocument(String(args.path ?? ''), args.pages ? String(args.pages) : undefined) } });
+        }
         const text = name === 'api' ? await callApi(String(args.path ?? ''))
           : name === 'sql' ? runSql(String(args.query ?? ''))
           : name === 'change' ? await callChange(String(args.method ?? ''), String(args.path ?? ''), args.body)

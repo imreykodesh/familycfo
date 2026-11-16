@@ -84,9 +84,9 @@ It understands how Israeli money actually moves:
   - an optional categorization endpoint you configure (`categoryApiUrl`) receives transaction descriptions.
 - The data chat reads through a read-only SQL connection and whitelisted GET endpoints of the local API, and can change
   data only through whitelisted endpoints of the same API (budgets, categories, transactions, rules, planned and manual
-  entries, tags and the settings-style tables — never the scrape, bank logins or OTP). It can open only the files in
-  `data/` (Claude only; enforced by a hook that blocks reading anything else) — with Gemini or Kiro it has no file
-  access at all. Back up `bank.db` if you let it make large changes.
+  entries, tags and the settings-style tables — never the scrape, bank logins or OTP). It can open only the insurance
+  documents and reports in `data/policies` and `data/reports` (Claude: a hook that blocks reading anything else; Gemini
+  and Kiro: the MCP tool `read_document`, which serves only those two folders) — no other file access. Back up `bank.db` if you let it make large changes.
 - Log files (`data/logs/`, kept 14 days) hold what the app prints — including scrape errors and the text of the bank's page
   when a login failed. They stay on your machine like the database.
 
@@ -192,22 +192,23 @@ stored in the app. Pick it in Settings → "עוזר AI" (or `AGENT_PROVIDER=cla
 
 | Provider | Setup | Notes |
 |---|---|---|
-| [Claude Code](https://claude.com/claude-code) (default) | `npm install -g @anthropic-ai/claude-code`, then run `claude` once and sign in | Your Claude subscription (`ANTHROPIC_API_KEY` is removed from its environment on purpose). The only one that can open the insurance documents and reports. |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm install -g @google/gemini-cli`, then run `gemini` once and sign in with Google (or set `GEMINI_API_KEY`) | Data only, no documents. |
-| [Kiro CLI](https://kiro.dev/docs/cli/) | Install from kiro.dev, and set `KIRO_API_KEY` (headless runs need an API key) before `npm run dev` | Data only, no documents. The answer arrives as plain text, without the "what it looked up" chips. |
+| [Claude Code](https://claude.com/claude-code) (default) | `npm install -g @anthropic-ai/claude-code`, then run `claude` once and sign in | Your Claude subscription (`ANTHROPIC_API_KEY` is removed from its environment on purpose). Opens the insurance documents and reports, scans and photos too. |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm install -g @google/gemini-cli`, then run `gemini` once and sign in with Google (or set `GEMINI_API_KEY`) | Opens the documents through `read_document` (the file itself, so scans and photos too). |
+| [Kiro CLI](https://kiro.dev/docs/cli/) | Install from kiro.dev, and set `KIRO_API_KEY` (headless runs need an API key) before `npm run dev` | Opens the documents through `read_document` (a PDF's text — a scan or a photo needs Claude or Gemini). The answer arrives as plain text, without the "what it looked up" chips. |
 
 The tool must be on the `PATH` of the shell that runs `npm run dev`.
 
 Each question starts the tool in a temporary folder with:
 
-- **no built-in tools** — except, for Claude, reading documents, limited by a hook to a copy of `data/`
+- **no built-in tools** — except, for Claude, reading documents, limited by a hook to a copy of `data/` (Gemini and
+  Kiro open them with the MCP server's `read_document`)
   (Gemini: `tools.core` allows only `activate_skill`; Kiro: an agent whose only tools are `@household`);
 - an MCP server (`src/agent/mcp.ts`) with three tools: `api` (whitelisted GET endpoints — the same numbers the
   screens show), `sql` (`SELECT` only, on a read-only connection) and `change` (POST / PUT / PATCH / DELETE on
-  whitelisted endpoints — the same calls the screens make);
+  whitelisted endpoints — the same calls the screens make), plus for Gemini and Kiro `read_document` (the documents);
 - its instructions in [`agent/CLAUDE.md`](agent/CLAUDE.md) and skills in [`agent/.claude/skills/`](agent/.claude/skills)
   (monthly review, subscriptions audit, category deep-dive, trip cost, insurance questions, pension and portfolio
-  reviews, scrape problems). Edit them to change how it answers — every provider gets the same ones.
+  reviews, importing an uploaded report, scrape problems). Edit them to change how it answers — every provider gets the same ones.
 
 The chat changes data when you ask it to ("set a ₪1,500 budget for restaurants", "move these to groceries", "add a ₪120
 cash expense"); when a change is its own suggestion it asks first, with a one-click button. Its answers link to the
@@ -218,8 +219,8 @@ screen they talk about. It gives facts, not investment advice.
 Pension / study / provident fund reports, insurance summaries (e.g. from your agent, the pension clearing house
 or הר הביטוח) and mortgage balance reports / loan amortization schedules come as PDFs. Press **ייבוא דוח** on the
 **פנסיה וגמל**, **ביטוחים** or **הלוואות ומשכנתא** screen and pick the PDF (or a photo): it is saved in the git-ignored
-`data/reports/` folder and the data chat reads it and puts its numbers in the app (this needs the Claude option in
-Settings, the only one that can open documents). A report already extracted to JSON can be picked there too and is
+`data/reports/` folder and the data chat reads it and puts its numbers in the app (works with Claude, Gemini and Kiro;
+a scan or a photo needs Claude or Gemini, Kiro reads digital PDFs). A report already extracted to JSON can be picked there too and is
 imported directly. From the code, the same JSON imports run as:
 
 ```bash

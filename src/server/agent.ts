@@ -18,7 +18,8 @@ import { dataCoverage } from '../analytics/balances.js';
  * and streams the answer back as server-sent events.
  *
  * - Claude also gets Read, limited by a hook to a copy of the insurance documents / reports (docs/), and the skills.
- * - Gemini and Kiro get the MCP tools only (no file access at all), so they can't open the documents themselves.
+ * - Gemini and Kiro get no built-in tools; they open the same documents with the MCP server's read_document, which
+ *   only serves files from data/policies and data/reports (Gemini gets the file itself, Kiro the PDF's text).
  *
  * A conversation continues with the provider's own resume: Claude / Gemini by their session id, Kiro by running in a
  * folder of its own per conversation (`--resume` continues the last conversation of that folder).
@@ -50,14 +51,13 @@ const TOOLS_TEXT: Record<AgentProvider, string> = {
   claude: `Your only tools are the household tools (api and sql to read, change to update data the user asked to change), Skill,
 and Read for the documents in ./docs/: insurance policies
 (./docs/policies, paths from api /insurance) and imported pension / insurance reports (./docs/reports, the file from api /pension).`,
-  gemini: `Your only tools are the household tools (api and sql to read, change to update data the user asked to change) and
-activate_skill for the skills listed to you.
-You can't open files: the insurance documents and imported reports aren't available in this setup. For a coverage question, answer
-from the policy fields in api /insurance, say that the document itself wasn't read, and suggest the Claude option in Settings for it.`,
-  kiro: `Your only tools are the household tools (api and sql to read, change to update data the user asked to change).
-The skills below are guides for recurring kinds of questions.
-You can't open files: the insurance documents and imported reports aren't available in this setup. For a coverage question, answer
-from the policy fields in api /insurance, say that the document itself wasn't read, and suggest the Claude option in Settings for it.`,
+  gemini: `Your only tools are the household tools (api and sql to read, change to update data the user asked to change,
+read_document to open the insurance documents and the uploaded / imported reports in docs/policies and docs/reports) and
+activate_skill for the skills listed to you. Where the instructions or a skill say Read, use read_document.`,
+  kiro: `Your only tools are the household tools (api and sql to read, change to update data the user asked to change,
+read_document to open the insurance documents and the uploaded / imported reports in docs/policies and docs/reports —
+you get a PDF's text, page by page). The skills below are guides for recurring kinds of questions.
+Where the instructions or a skill say Read, use read_document.`,
 };
 
 /** `--model <id>` when the user picked one in Settings; nothing = the tool's own default. All three CLIs take --model. */
@@ -90,10 +90,9 @@ Database schema (bank.db):
 ${schemaText(db)}`;
 }
 
-/** Claude reads agent/CLAUDE.md by itself; the others get it in their prompt (without the Read-only parts that don't apply). */
+/** Claude reads agent/CLAUDE.md by itself; the others get it in their prompt, with read_document for Claude's Read. */
 function standingInstructions(): string {
-  return readFileSync(join(AGENT_DIR, 'CLAUDE.md'), 'utf8')
-    .replace(/^- `Read` — [\s\S]*?(?=\n\n|\n## )/m, '- Documents (insurance PDFs, reports) can\'t be opened in this setup — see above.');
+  return readFileSync(join(AGENT_DIR, 'CLAUDE.md'), 'utf8').replace(/^- `Read` — /m, '- `read_document` — ');
 }
 
 const SKILLS_DIR = join(AGENT_DIR, '.claude', 'skills');
@@ -136,14 +135,18 @@ function mcpCommand(): { command: string; args: string[] } {
   return { command: process.execPath, args: [join(APP_DIR, 'node_modules', 'tsx', 'dist', 'cli.mjs'), join(APP_DIR, 'src', 'agent', 'mcp.ts')] };
 }
 
-/** The household MCP server (read + whitelisted changes), as every provider's config spells it. */
-function householdServer() {
+/**
+ * The household MCP server (read + whitelisted changes), as every provider's config spells it. Gemini and Kiro also
+ * get read_document (`docMode`) for the documents; Claude opens them with its own Read.
+ */
+function householdServer(docMode?: 'gemini' | 'kiro') {
   return {
     ...mcpCommand(),
     env: {
       ...(IN_DESKTOP ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
       BANK_DB: process.env.BANK_DB ? resolve(process.env.BANK_DB) : dataPath('bank.db'),
       HOUSEHOLD_API: `http://127.0.0.1:${apiPort}`,
+      ...(docMode ? { HOUSEHOLD_DOC_MODE: docMode, HOUSEHOLD_POLICIES_DIR: POLICIES_DIR, HOUSEHOLD_REPORTS_DIR: REPORTS_DIR } : {}),
     },
   };
 }
@@ -247,7 +250,7 @@ function startGemini(db: DB, message: string, sessionId: string | undefined): Ru
     // model in CLI 0.68 — it then invents tool names and can't read the data.) The list is CLI 0.68's built-ins.
     tools: { exclude: GEMINI_BUILTIN_TOOLS },
     mcp: { allowed: ['household'] },
-    mcpServers: { household: { ...householdServer(), trust: true, includeTools: ['api', 'sql', 'change'] } },
+    mcpServers: { household: { ...householdServer('gemini'), trust: true, includeTools: ['api', 'sql', 'change', 'read_document'] } },
   }, null, 2));
   const systemFile = join(GEMINI_DIR, 'system.md');
   writeFileSync(systemFile, `${systemPrompt(db, 'gemini')}\n\n${standingInstructions()}`);
@@ -323,7 +326,7 @@ function startKiro(db: DB, message: string, sessionId: string | undefined): Run 
     name: 'household',
     description: 'Assistant for the household finance data (reads it, and changes it when asked)',
     prompt: `${systemPrompt(db, 'kiro')}\n\n${standingInstructions()}`,
-    mcpServers: { household: householdServer() },
+    mcpServers: { household: householdServer('kiro') },
     tools: ['@household'],
     includeMcpJson: false,
     includePowers: false,

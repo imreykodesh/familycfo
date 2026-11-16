@@ -8,7 +8,7 @@ description: Import an uploaded report into the app — a pension / study-fund /
 The user uploaded the file from a screen of the app; it is in `./docs/reports/<file>` (the message names it).
 The goal: the numbers in the document end up in the app, without the user doing anything else.
 
-1. `Read` the file. Long PDFs: the summary pages first, then the detailed tables you need.
+1. Open the file (`Read`; with Gemini / Kiro `read_document`). Long PDFs: the summary pages first, then the detailed tables you need.
 2. Decide what it is (pension / insurance / loan or mortgage). If it isn't any of these, or it's unreadable, say so and stop.
 3. Look up what exists already, so you update instead of duplicating: `/meta` (members), `/pension`, `/insurance`, `/liabilities`.
    The owner of the report must be a member: match the name in the document to a member in `/meta`. If it's unclear whose it

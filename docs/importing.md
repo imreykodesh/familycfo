@@ -11,7 +11,7 @@ areas. Those are PDFs, so the flow is:
 3. Import it. Both importers are idempotent: running them again updates what changed and never duplicates.
 
 **In the app** all of this is one button: **ייבוא דוח** on the pension, insurance or loans screen. Pick the PDF and the data
-chat (with Claude) reads it, extracts it in this format and imports it; pick a JSON file and it is imported directly
+chat (Claude, Gemini or Kiro) reads it, extracts it in this format and imports it; pick a JSON file and it is imported directly
 (`POST /api/pension/import`, `POST /api/insurance/import`; insurance documents are looked up in `data/reports/`, so pick
 them together with the JSON). Mortgage balance reports and loan amortization schedules work the same way from the loans
 screen — the chat creates or updates the loan and its balance. The commands below do the same from the code.
