@@ -7,6 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm run scrape     # Scrape all banks once, then run the pipeline (SCRAPE_ONLY=isracard,max to limit; SCRAPE_FROM=2026-01-01 to backfill; SHOW_BROWSER=0 headless; SCHEDULE="0 7 * * *" to keep running on cron)
 npm run dev        # Household app: API (127.0.0.1:4310) + web UI (http://127.0.0.1:5180)
+npm run build      # Local build (scripts/build.mjs): install if needed → typecheck → tests → web/dist (-- --clean, -- --skip-tests)
+npm run serve      # The built app on one port: API + web/dist on http://127.0.0.1:4310 (SERVE_WEB=1)
 npm run pipeline   # Re-run classification / recurring / suggestions / alerts without scraping
 npm run migrate    # Apply DB migrations (also runs automatically on open)
 npm test           # Vitest unit tests (in-memory SQLite)
