@@ -633,6 +633,16 @@ export const migrations: Migration[] = [
       for (const [from, to] of Object.entries(SCRAPER_CATEGORY_ALIASES)) alias.run(from, to);
     },
   },
+  {
+    version: 15,
+    name: 'scrape run diagnostics',
+    up(db) {
+      // what the bank's page showed when a failed scrape closed it, and the period that was asked for
+      db.exec(`ALTER TABLE scrape_runs ADD COLUMN page_state TEXT`);
+      db.exec(`ALTER TABLE scrape_runs ADD COLUMN start_date TEXT`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_scrape_runs_company ON scrape_runs(company, id)`);
+    },
+  },
 ];
 
 type CategoryKind = 'expense' | 'income' | 'transfer' | 'card_payment' | 'savings';

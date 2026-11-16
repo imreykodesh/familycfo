@@ -139,6 +139,16 @@ Most endpoints also take `member=ID` (a household member) and `business=ID`.
 - The portfolio is part of net worth (`/networth`, type `brokerage`, one item per broker and owner) and counts as liquid.
 - Facts only — never recommend buying, selling or rebalancing.
 
+## Scrape problems and logs
+
+- `/sync-status` — each bank / card company's last update, failures in a row and an `explanation` (title + hint, Hebrew).
+  `/scrape/runs?company=ID&failed=1` — the history, with `errorType`, `errorMessage`, `pageState` (the bank page's text when it closed)
+  and `startDate` (the period asked for). `/logs?level=error&days=2` — the app's own log lines around a failure.
+- Explain in plain Hebrew what most likely happened and the one or two things to do. Say whether it's the login (wrong / expired
+  password, blocked user — retrying makes it worse), the bank's site (slow, changed, blocked automation — retry later), an SMS code
+  that wasn't entered, or this computer (no Chrome, no internet).
+- Never ask for or repeat a password or a code. Don't quote personal details from `pageState` beyond what explains the error.
+
 ## How the data works
 
 - A month is a **cycle** (key `YYYY-MM`) starting on the cycle start day (given in the system prompt; 1 = calendar month).

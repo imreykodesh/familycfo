@@ -14,6 +14,9 @@ import { scrapeState, startScrape, submitOtp } from '../scrapeJob.js';
 import { toApi } from '../crud.js';
 import { monthPlan } from '../../analytics/commitments.js';
 import { parseFilter } from './transactions.js';
+import { sendCsv } from '../csv.js';
+import { explainScrapeError } from '../../scrapeErrors.js';
+import { LOG_DIR, readLogs, type LogLevel } from '../../log.js';
 
 type Q = Record<string, string | undefined>;
 /** the longest history /api/cashflow returns (20 years) */
@@ -67,6 +70,22 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
     return cashflowHistory(db, { ...parseFilter(q), cycles: Math.min(Math.max(1, cycles || 6), MAX_CYCLES) });
   });
 
+  // month by month: the totals, then one column per category (the same numbers as /api/cashflow)
+  app.get('/api/cashflow/export.csv', async (req, reply) => {
+    const q = req.query as Q;
+    const cycles = Math.min(Math.max(Number(q.cycles ?? 12) || 12, 1), 60);
+    const history = cashflowHistory(db, { ...parseFilter(q), cycles }).filter(c => c.txCount > 0);
+    const label = (c: { name: string; parentName: string | null }) => (c.parentName ? `${c.parentName} / ${c.name}` : c.name);
+    const categories = [...new Set(history.flatMap(c => c.byCategory.map(label)))].sort((a, b) => a.localeCompare(b, 'he'));
+    return sendCsv(reply, `תזרים-${cycles}-חודשים.csv`,
+      ['חודש', 'מתאריך', 'עד תאריך', 'הכנסות', 'הוצאות', 'קבועות', 'משתנות', 'נטו', 'הפקדות לחיסכון', ...categories],
+      history.map(c => {
+        const byCat = new Map<string, number>();
+        for (const s of c.byCategory) byCat.set(label(s), (byCat.get(label(s)) ?? 0) + s.spend);
+        return [c.cycle.key, c.cycle.start, c.cycle.end, c.income, c.spend, c.fixed, c.dynamic, c.net, c.savingsDeposits,
+          ...categories.map(n => byCat.get(n) ?? 0)];
+      }), `cashflow-${cycles}-months.csv`);
+  });
   /** How far back the scraped history goes, per company, and from when all of them have data. */
   app.get('/api/coverage', async () => dataCoverage(db));
 
@@ -185,10 +204,36 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
     return { ok: true };
   });
 
+  const withExplanation = (r: Record<string, unknown>) => ({
+    ...toApi(r),
+    explanation: r.success ? null : explainScrapeError(r.error_type as string | null, r.error_message as string | null, r.page_state as string | null),
+  });
+
   app.get('/api/sync-status', async () => (db.prepare(`
-    SELECT r.company, r.started_at, r.finished_at, r.success, r.error_type, r.error_message, r.new_transactions,
-      (SELECT MAX(started_at) FROM scrape_runs WHERE company = r.company AND success = 1) AS last_success
+    SELECT r.company, r.started_at, r.finished_at, r.success, r.error_type, r.error_message, r.page_state, r.new_transactions,
+      (SELECT MAX(started_at) FROM scrape_runs WHERE company = r.company AND success = 1) AS last_success,
+      (SELECT COUNT(*) FROM scrape_runs f WHERE f.company = r.company AND f.success = 0
+         AND f.id > COALESCE((SELECT MAX(id) FROM scrape_runs WHERE company = r.company AND success = 1), 0)) AS failures_in_a_row
     FROM scrape_runs r WHERE r.id = (SELECT MAX(id) FROM scrape_runs WHERE company = r.company)
     ORDER BY r.company
-  `).all() as Record<string, unknown>[]).map(toApi));
+  `).all() as Record<string, unknown>[]).map(withExplanation));
+
+  // every run, newest first: when, what period, the result and — for a failure — what it probably means
+  app.get('/api/scrape/runs', async req => {
+    const q = req.query as { company?: string; failed?: string; limit?: string };
+    const limit = Math.min(Math.max(Number(q.limit ?? 100) || 100, 1), 1000);
+    const where = [q.company ? 'company = @company' : '', q.failed === '1' ? 'success = 0' : ''].filter(Boolean);
+    return (db.prepare(`
+      SELECT id, company, started_at, finished_at, success, error_type, error_message, page_state, new_transactions, start_date,
+        CAST(ROUND((julianday(finished_at) - julianday(started_at)) * 86400) AS INTEGER) AS duration_seconds
+      FROM scrape_runs ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT @limit
+    `).all({ company: q.company ?? null, limit }) as Record<string, unknown>[]).map(withExplanation);
+  });
+
+  // the app's log files (data/logs): newest lines of the server and the scrapes
+  app.get('/api/logs', async req => {
+    const q = req.query as { days?: string; level?: string; search?: string; limit?: string };
+    const level = ['debug', 'info', 'warn', 'error'].includes(q.level ?? '') ? q.level as LogLevel : undefined;
+    return { dir: LOG_DIR, ...readLogs({ days: Number(q.days ?? 2) || 2, limit: Number(q.limit ?? 500) || 500, level, search: q.search }) };
+  });
 }

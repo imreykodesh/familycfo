@@ -73,12 +73,16 @@ It understands how Israeli money actually moves:
   - your banks / card companies (the scraper logs in as you, in a local Chrome);
   - Bank of Israel exchange rates (nothing personal);
   - Yahoo Finance quotes — **only ticker symbols**, never quantities or values;
-  - the data chat, if you use it: your questions and the data it reads go to Anthropic through your own Claude Code login;
+  - the data chat, if you use it: your questions and the data it reads go to the AI provider you picked in Settings
+    (Anthropic, Google or Kiro) through your own CLI login;
   - an optional categorization endpoint you configure (`categoryApiUrl`) receives transaction descriptions.
 - The data chat reads through a read-only SQL connection and whitelisted GET endpoints of the local API, and can change
   data only through whitelisted endpoints of the same API (budgets, categories, transactions, rules, planned and manual
   entries, tags and the settings-style tables — never the scrape, bank logins or OTP). It can open only the files in
-  `data/` (enforced by a hook that blocks reading anything else). Back up `bank.db` if you let it make large changes.
+  `data/` (Claude only; enforced by a hook that blocks reading anything else) — with Gemini or Kiro it has no file
+  access at all. Back up `bank.db` if you let it make large changes.
+- Log files (`data/logs/`, kept 14 days) hold what the app prints — including scrape errors and the text of the bank's page
+  when a login failed. They stay on your machine like the database.
 
 ## Quick start — try the demo
 
@@ -124,14 +128,15 @@ accounts, two cards, a mortgage, savings and a small stock portfolio. Delete `de
    [israeli-bank-scrapers docs](https://github.com/eshaham/israeli-bank-scrapers#specific-definitions-per-scraper).
    Bank accounts and cards are told apart automatically.
 
-3. **First scrape** (fetches the last 3 months, plus upcoming card charges):
+3. **First scrape** (fetches the last 3 months by default, plus upcoming card charges; change it in Settings → "כמה חודשים אחורה לעדכן"):
 
    ```bash
    npm run scrape
    ```
 
    A Chrome window opens for each company (`SHOW_BROWSER=0` for headless). If Bank Hapoalim asks for an SMS code,
-   type it in the terminal. To fetch more history: `SCRAPE_FROM=2025-01-01 npm run scrape`, or `SCRAPE_FROM=max` (also "משיכת היסטוריה מלאה"
+   type it in the terminal. To fetch more history: `SCRAPE_MONTHS=12 npm run scrape` (or the "כמה חודשים אחורה לעדכן"
+   setting), `SCRAPE_FROM=2025-01-01 npm run scrape`, or `SCRAPE_FROM=max` (also "משיכת היסטוריה מלאה"
    under the update button) for as much as each company gives — Max about 4 years, Leumi 3, Cal 18 months, most
    others about a year. **מגמות הוצאות → מקסימום** shows the history from the month every company has data for.
 
@@ -174,25 +179,37 @@ running they just open it. Native Windows (outside WSL) is less tested than macO
 - **Or on a schedule:** `SCHEDULE="0 7 * * *" npm run scrape` keeps running and scrapes every morning at 7.
 - Re-scraping is safe: rows are de-duplicated, and anything you edited by hand (category, kind, member) is never overwritten.
 - `npm run pipeline` re-runs classification, recurring-payment detection, suggestions and alerts without scraping.
+- **How far back:** Settings → "כמה חודשים אחורה לעדכן" (1–24, default 3), or `SCRAPE_MONTHS=12` for one run.
+- **When an update fails:** the "יומן ותקלות" page (`/logs`) shows each bank's last result with a Hebrew explanation of
+  what probably happened and what to do (wrong password, SMS code not entered, the site is slow or changed, no Chrome…),
+  the history of every update, and the log file. "הסבר עם העוזר" asks the data chat about that error.
+- **Export:** "ייצוא ל-CSV" on the transactions page (exactly the rows of the current filter) and on the cash-flow page
+  (12 months: totals and one column per category). The files open in Excel with Hebrew intact.
 
 ## The AI data chat (optional)
 
 The ✨ button next to the notifications bell opens a chat (text or push-to-talk, Hebrew) that answers questions from
-your data. It runs your own [Claude Code](https://claude.com/claude-code) CLI on your machine, using your Claude
-subscription — no API key is stored in the app (`ANTHROPIC_API_KEY` is removed from its environment on purpose).
+your data. It runs an AI command-line tool you already use, on your machine and with your own login — no API key is
+stored in the app. Pick it in Settings → "עוזר AI" (or `AGENT_PROVIDER=claude|gemini|kiro`):
 
-1. Install Claude Code and log in once: `npm install -g @anthropic-ai/claude-code`, then run `claude` and sign in.
-2. Make sure `claude` is on the `PATH` of the shell that runs `npm run dev`.
+| Provider | Setup | Notes |
+|---|---|---|
+| [Claude Code](https://claude.com/claude-code) (default) | `npm install -g @anthropic-ai/claude-code`, then run `claude` once and sign in | Your Claude subscription (`ANTHROPIC_API_KEY` is removed from its environment on purpose). The only one that can open the insurance documents and reports. |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `npm install -g @google/gemini-cli`, then run `gemini` once and sign in with Google (or set `GEMINI_API_KEY`) | Data only, no documents. |
+| [Kiro CLI](https://kiro.dev/docs/cli/) | Install from kiro.dev, and set `KIRO_API_KEY` (headless runs need an API key) before `npm run dev` | Data only, no documents. The answer arrives as plain text, without the "what it looked up" chips. |
 
-Each question starts `claude -p` in a temporary folder with:
+The tool must be on the `PATH` of the shell that runs `npm run dev`.
 
-- **no built-in tools** except reading documents, limited by a hook to a copy of `data/`;
+Each question starts the tool in a temporary folder with:
+
+- **no built-in tools** — except, for Claude, reading documents, limited by a hook to a copy of `data/`
+  (Gemini: `tools.core` allows only `activate_skill`; Kiro: an agent whose only tools are `@household`);
 - an MCP server (`src/agent/mcp.ts`) with three tools: `api` (whitelisted GET endpoints — the same numbers the
   screens show), `sql` (`SELECT` only, on a read-only connection) and `change` (POST / PUT / PATCH / DELETE on
   whitelisted endpoints — the same calls the screens make);
 - its instructions in [`agent/CLAUDE.md`](agent/CLAUDE.md) and skills in [`agent/.claude/skills/`](agent/.claude/skills)
   (monthly review, subscriptions audit, category deep-dive, trip cost, insurance questions, pension and portfolio
-  reviews). Edit them to change how it answers.
+  reviews, scrape problems). Edit them to change how it answers — every provider gets the same ones.
 
 The chat changes data when you ask it to ("set a ₪1,500 budget for restaurants", "move these to groceries", "add a ₪120
 cash expense"); when a change is its own suggestion it asks first, with a one-click button. Its answers link to the
@@ -222,7 +239,10 @@ Both are idempotent — re-running updates, never duplicates. Policy documents c
 | `BANK_DB` | env | `bank.db` | Database file. Use a copy for experiments. |
 | `PORT` / `WEB_PORT` | env | `4310` / `5180` | API and web app ports (both bind to 127.0.0.1). |
 | `SCRAPE_ONLY` | env | all | `SCRAPE_ONLY=isracard,max` scrapes only these companies. |
-| `SCRAPE_FROM` | env | 3 months back | Start date of the scrape (`YYYY-MM-DD`), for backfilling; `max` = as far back as each company allows (up to 5 years). |
+| `AGENT_PROVIDER` | env | the Settings value (`claude`) | Which CLI answers the data chat: `claude`, `gemini` or `kiro`. |
+| `LOG_DIR` / `LOG_KEEP_DAYS` | env | `data/logs` / `14` | Where log files are written and how long they're kept. |
+| `SCRAPE_MONTHS` | env | the Settings value (3) | How many months back a scrape fetches (1–24). Overrides the "כמה חודשים אחורה לעדכן" setting. |
+| `SCRAPE_FROM` | env | 3 months back | Start date of the scrape (`YYYY-MM-DD`), for backfilling; `max` = as far back as each company allows (up to 5 years). Overrides `SCRAPE_MONTHS`. |
 | `SHOW_BROWSER` | env | shown | `SHOW_BROWSER=0` runs Chrome headless. |
 | `SCHEDULE` | env | none | Cron expression; keeps `npm run scrape` running on a schedule. |
 | `POLICIES_DIR` / `REPORTS_DIR` | env | `data/policies` / `data/reports` | Where insurance documents and imported reports are kept. |
@@ -239,7 +259,9 @@ src/
   db/                   SQLite connection, numbered migrations, saving scraped accounts
   ingest/               normalize & de-duplicate rows, classification rules, card-bill / transfer reconciliation
   analytics/            pure functions: cash flow, budgets, forecast, recurring, net worth, investments, alerts …
-  server/               Fastify API (127.0.0.1) + the data chat runner
+  server/               Fastify API (127.0.0.1) + the data chat runner (Claude / Gemini / Kiro)
+  log.ts                log files in data/logs (console + API log), read back for the logs page
+  scrapeErrors.ts       a failed scrape in words: what happened and what to do
   agent/                the chat's MCP server (read + whitelisted changes) and the document-read guard
   import/               pension and insurance report importers
   demo.ts               the demo household
@@ -276,7 +298,10 @@ Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
   `SHOW_BROWSER=1` and typing it in the Chrome window.
 - **A card bill shows as an expense:** that card isn't scraped (or isn't linked). Add the card company to
   `accounts.json`, or set "משולם מ-" for the card in Settings.
-- **The chat says it can't start:** check that `claude` runs in the same terminal and that you're logged in.
+- **The chat says it can't start:** check that the tool picked in Settings (`claude`, `gemini` or `kiro-cli`) runs in the
+  same terminal and that you're logged in (Kiro: `KIRO_API_KEY` is set).
+- **Where are the logs:** `data/logs/server-YYYY-MM-DD.log` (the app, including scrapes started from the browser) and
+  `scrape-YYYY-MM-DD.log` (`npm run scrape`), also shown on the "יומן ותקלות" page.
 - **No stock prices:** Yahoo Finance needs internet; the last known price is kept and the page says which symbols failed.
   Tel Aviv symbols end in `.TA` (e.g. `LUMI.TA`); a fund with no quote can use a manual price.
 

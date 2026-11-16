@@ -1,15 +1,15 @@
 import { useEffect, useState, type ComponentType } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, type Rule } from '../api';
+import { api, type AgentProvider, type Rule, type SyncStatus } from '../api';
 import { useLookups } from '../state';
 import { day } from '../format';
 import {
-  CalendarClock, Coins, Layers, Plus, RefreshCw, Settings2, SlidersHorizontal, Tags, Users, Wallet, Wand2, X,
+  CalendarClock, Coins, Layers, Plus, RefreshCw, Settings2, SlidersHorizontal, Sparkles, Tags, Users, Wallet, Wand2, X,
 } from 'lucide-react';
-import { AccountSelect, CategorySelect, MemberSelect, PageHeader } from '../components/ui';
+import { AccountSelect, CategorySelect, MemberSelect, PageHeader, Segmented } from '../components/ui';
+import { companyName } from '../components/ScrapeButton';
 
-interface SyncRow { company: string; startedAt: string; success: number; errorType: string | null; errorMessage: string | null; newTransactions: number; lastSuccess: string | null }
 interface FxRow { currency: string; rate_to_ils: number; date: string; source: string }
 
 export default function Settings() {
@@ -27,10 +27,10 @@ export default function Settings() {
   const remove = useMutation({ mutationFn: (path: string) => api.del(path), onSuccess: () => refresh('scheduled', 'rules') });
 
   const rules = useQuery({ queryKey: ['rules'], queryFn: () => api.get<Rule[]>('/rules') });
-  const sync = useQuery({ queryKey: ['sync'], queryFn: () => api.get<SyncRow[]>('/sync-status') });
+  const sync = useQuery({ queryKey: ['sync'], queryFn: () => api.get<SyncStatus[]>('/sync-status') });
   const fx = useQuery({ queryKey: ['fx'], queryFn: () => api.get<FxRow[]>('/fx') });
   const pipeline = useMutation({ mutationFn: () => api.post<Record<string, number>>('/pipeline', {}), onSuccess: () => qc.invalidateQueries() });
-  const saveSettings = useMutation({ mutationFn: (b: Record<string, string>) => api.put('/settings', b), onSuccess: () => refresh('summary', 'forecast') });
+  const saveSettings = useMutation({ mutationFn: (b: Record<string, string>) => api.put('/settings', b), onSuccess: () => refresh('summary', 'forecast', 'agent') });
 
   const [newTag, setNewTag] = useState('');
 
@@ -63,6 +63,36 @@ export default function Settings() {
             <input className="input num" type="number" step={500} defaultValue={meta.settings.balance_buffer}
               onBlur={e => saveSettings.mutate({ balance_buffer: e.target.value })} />
           </label>
+          <label className="block">
+            <span className="label">כמה חודשים אחורה לעדכן</span>
+            <input className="input num" type="number" min={1} max={24} defaultValue={meta.settings.scrape_months_back ?? 3}
+              onBlur={e => {
+                const n = Math.round(Number(e.target.value));
+                if (n >= 1 && n <= 24) saveSettings.mutate({ scrape_months_back: String(n) });
+                else e.target.value = meta.settings.scrape_months_back ?? '3';
+              }} />
+            <span className="mt-1.5 block text-xs text-zinc-500">בכל לחיצה על ״עדכון נתונים״ (1–24). חלק מהבנקים וחברות האשראי מחזירים פחות היסטוריה.</span>
+          </label>
+        </div>
+      </Section>
+
+      <Section id="assistant" title="עוזר AI" icon={Sparkles} color="var(--chart-5)"
+        subtitle="איזה כלי עונה בצ׳אט (✨ בכותרת). בכל המקרים העוזר רץ במחשב שלך, עם החשבון שלך בכלי, ורואה את הנתונים רק לקריאה דרך שרת MCP מקומי.">
+        <Segmented value={(meta.settings.agent_provider ?? 'claude') as AgentProvider}
+          onChange={v => saveSettings.mutate({ agent_provider: v })}
+          options={[{ value: 'claude', label: 'Claude' }, { value: 'gemini', label: 'Gemini' }, { value: 'kiro', label: 'Kiro' }]} />
+        <div className="mt-3 max-w-3xl text-sm leading-relaxed text-zinc-500">
+          {(meta.settings.agent_provider ?? 'claude') === 'claude' && <>
+            Claude Code (<code dir="ltr">claude</code>) עם המנוי שלך. היחיד שיכול גם לפתוח את מסמכי הביטוח והדוחות שהעלית.
+          </>}
+          {meta.settings.agent_provider === 'gemini' && <>
+            Gemini CLI: התקנה ב-<code dir="ltr">npm install -g @google/gemini-cli</code>, ואז הרצה אחת של <code dir="ltr">gemini</code> בטרמינל
+            כדי להתחבר עם חשבון Google (או להגדיר <code dir="ltr">GEMINI_API_KEY</code>). העוזר לא פותח מסמכים — רק את הנתונים.
+          </>}
+          {meta.settings.agent_provider === 'kiro' && <>
+            Kiro CLI: התקנה מ-<span dir="ltr">kiro.dev/cli</span>, ומפתח API של Kiro במשתנה <code dir="ltr">KIRO_API_KEY</code> לפני
+            <code dir="ltr"> npm run dev</code> (מצב לא-אינטראקטיבי דורש מפתח). העוזר לא פותח מסמכים — רק את הנתונים.
+          </>}
         </div>
       </Section>
 
@@ -141,14 +171,16 @@ export default function Settings() {
         </div>
       </Section>
 
-      <Section title="מצב סריקות" icon={RefreshCw} color="var(--chart-7)">
+      <Section title="מצב סריקות" icon={RefreshCw} color="var(--chart-7)" subtitle="הסבר מלא, היסטוריה וקובץ היומן — בעמוד יומן ותקלות.">
         <div className="scroll-x card-bleed"><table className="table">
           <thead><tr><th>חברה</th><th>סריקה אחרונה</th><th>תוצאה</th><th>הצלחה אחרונה</th><th className="text-end">חדשות</th></tr></thead>
           <tbody>
             {sync.data?.map(s => (
               <tr key={s.company}>
-                <td>{s.company}</td><td className="text-xs">{day(s.startedAt)}</td>
-                <td>{s.success ? <span className="text-emerald-600">✓</span> : <span className="text-rose-600" title={s.errorMessage ?? ''}>✗ {s.errorType}</span>}</td>
+                <td>{companyName(s.company)}</td><td className="text-xs">{day(s.startedAt)}</td>
+                <td>{s.success ? <span className="text-emerald-600">✓</span> : (
+                  <Link to="/logs" className="text-rose-600 hover:underline" title={s.explanation?.hint ?? s.errorMessage ?? ''}>✗ {s.explanation?.title ?? s.errorType}</Link>
+                )}</td>
                 <td className="text-xs">{day(s.lastSuccess)}</td><td className="text-end">{s.newTransactions}</td>
               </tr>
             ))}

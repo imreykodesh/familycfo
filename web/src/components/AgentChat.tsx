@@ -1,15 +1,16 @@
 import { createContext, Fragment, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dialog } from 'radix-ui';
 import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, Database, ExternalLink, LoaderCircle, Mic, PencilLine, Plus, Sparkles, Square, X } from 'lucide-react';
+import { api, type AgentProvider } from '../api';
 import { cn } from '@/lib/utils';
 
 /**
- * The data chat: a drawer that asks the user's own Claude Code (via POST /api/agent/chat, streamed)
- * questions about the household data — and lets it change the data through the app's API.
- * Text or push-to-talk (the browser's speech recognition, Hebrew). Links in its answers open a
- * screen of the app (`/…`) or send a quick reply (`ask:…`).
+ * The data chat: a drawer that asks the user's own AI tool — Claude Code, Gemini CLI or Kiro CLI, chosen in Settings —
+ * (via POST /api/agent/chat, streamed) questions about the household data, and lets it change the data through the
+ * app's API. Text or push-to-talk (the browser's speech recognition, Hebrew). Links in its answers open a screen of
+ * the app (`/…`) or send a quick reply (`ask:…`).
  */
 
 /** `changes`: what the agent changed (labels) — the screens are refreshed after such an answer */
@@ -29,8 +30,9 @@ const SUGGESTIONS = [
 const SKILL_LABELS: Record<string, string> = {
   'monthly-review': 'סיכום חודש', 'subscriptions-audit': 'בדיקת מנויים', 'category-deep-dive': 'ניתוח קטגוריה', 'trip-cost': 'עלות טיול',
   'insurance-question': 'שאלה על פוליסה', 'insurance-review': 'סקירת ביטוחים',
-  'pension-review': 'סקירת פנסיה', 'portfolio-review': 'סקירת תיק השקעות',
+  'pension-review': 'סקירת פנסיה', 'portfolio-review': 'סקירת תיק השקעות', 'scrape-problem': 'בעיית עדכון',
 };
+export const PROVIDER_LABELS: Record<AgentProvider, string> = { claude: 'Claude', gemini: 'Gemini', kiro: 'Kiro' };
 
 /** Open the chat from anywhere with a question — sent right away, or left in the box to finish. */
 export function askAgent(text: string, send = false) {
@@ -57,6 +59,7 @@ const PATH_LABELS: Record<string, string> = {
   assets: 'נכסים', 'asset-snapshots': 'שווי נכס', liabilities: 'הלוואות', 'liability-snapshots': 'יתרת הלוואה', members: 'בני הבית',
   accounts: 'חשבונות', businesses: 'עסקים', links: 'קישור החזר', pipeline: 'סיווג מחדש', coverage: 'טווח הנתונים',
   insurance: 'ביטוחים', pension: 'פנסיה וגמל', investments: 'תיק ההשקעות', 'investments/holdings': 'תיק ההשקעות',
+  'sync-status': 'מצב העדכונים', 'scrape/runs': 'היסטוריית עדכונים', logs: 'קובץ היומן',
 };
 const METHOD_LABELS: Record<string, string> = { POST: 'הוספה', PUT: 'עדכון', PATCH: 'עדכון', DELETE: 'מחיקה' };
 
@@ -180,6 +183,8 @@ export function AgentChat() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<Saved>(load);
+  const agent = useQuery({ queryKey: ['agent'], queryFn: () => api.get<{ provider: AgentProvider }>('/agent'), staleTime: 60_000 });
+  const provider = PROVIDER_LABELS[agent.data?.provider ?? 'claude'];
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
@@ -245,8 +250,9 @@ export function AgentChat() {
       patchLast(m => ({ ...m, pending: false }));
       abort.current = null;
       setBusy(false);
-      // the agent changed data: everything on screen may be stale
-      if (changed) qc.invalidateQueries({ predicate: q => q.queryKey[0] !== 'scrape' });
+      // the agent changed data: everything on screen may be stale. Kiro's text output doesn't report its
+      // tool calls, so after a Kiro answer refresh anyway.
+      if (changed || agent.data?.provider === 'kiro') qc.invalidateQueries({ predicate: q => q.queryKey[0] !== 'scrape' });
       textarea.current?.focus();
     }
   }
@@ -323,7 +329,7 @@ export function AgentChat() {
             <span className="icon-tile h-8 w-8 rounded-lg [&_svg]:h-4 [&_svg]:w-4"><Sparkles /></span>
             <div className="min-w-0 flex-1">
               <Dialog.Title className="text-sm font-semibold">שאל על הנתונים</Dialog.Title>
-              <div className="text-xs text-muted-foreground">Claude · קורא ומעדכן את נתוני הבית</div>
+              <div className="text-xs text-muted-foreground">{provider} · קורא ומעדכן את נתוני הבית</div>
             </div>
             {!empty && <button type="button" className="btn-ghost btn-icon" onClick={newChat} aria-label="שיחה חדשה" title="שיחה חדשה"><Plus /></button>}
             <Dialog.Close className="btn-ghost btn-icon" aria-label="סגור"><X /></Dialog.Close>

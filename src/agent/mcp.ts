@@ -20,7 +20,7 @@ const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
 db.pragma('query_only = ON');
 
 // GET endpoints the agent may read (all are read-only)
-const API_PATHS = /^\/(summary|income|cashflow|forecast|coverage|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|transactions\/\d+\/similar|planned|rules|links|categories|meta|events(\/\d+(\/candidates)?)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled|sync-status|insurance|pension|investments)$/;
+const API_PATHS = /^\/(summary|income|cashflow|forecast|coverage|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|transactions\/\d+\/similar|planned|rules|links|categories|meta|events(\/\d+(\/candidates)?)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled|sync-status|scrape\/runs|logs|insurance|pension|investments)$/;
 
 // endpoints the agent may change (the method is checked by the API's own routes)
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -46,6 +46,8 @@ Paths: /summary, /month-plan?cycle=YYYY-MM, /cashflow?cycles=N (per-month income
 /insurance (policies, their documents with a path to open with Read, actual payments, insurance charges with no policy),
 /pension (pension / study / provident funds: value, fees, tracks + returns, deposits, expected pension; the latest report's totals),
 /investments (stock-market holdings: live price, value in ILS, gain vs buy price / baseline, today's change, value history).
+/sync-status (each bank's last scrape: result, failures in a row, explanation), /scrape/runs?company=&failed=1&limit=N (scrape history with
+the error, the bank page's text when it failed, and an explanation), /logs?level=error|warn&days=N&search=TEXT (the app's log lines).
 Common filters on most: member=ID, business=ID, tags=ID,ID.`,
     inputSchema: {
       type: 'object',

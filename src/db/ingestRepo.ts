@@ -123,10 +123,12 @@ export function saveTransactions(db: DB, txns: NormalizedTransaction[]): SaveRes
 export function recordScrapeRun(db: DB, run: {
   company: string; startedAt: string; success: boolean;
   errorType?: string; errorMessage?: string; newTransactions?: number;
+  /** a failed run: the bank page's URL and visible text when it closed */
+  pageState?: string; startDate?: string;
 }): void {
   db.prepare(`
-    INSERT INTO scrape_runs (company, started_at, finished_at, success, error_type, error_message, new_transactions)
-    VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?)
+    INSERT INTO scrape_runs (company, started_at, finished_at, success, error_type, error_message, new_transactions, page_state, start_date)
+    VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?)
   `).run(run.company, run.startedAt, run.success ? 1 : 0, run.errorType ?? null,
-    run.errorMessage ?? null, run.newTransactions ?? 0);
+    run.errorMessage ?? null, run.newTransactions ?? 0, run.pageState ?? null, run.startDate ?? null);
 }
