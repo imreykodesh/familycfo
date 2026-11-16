@@ -11,7 +11,7 @@ import { desktop } from '../desktop';
 import { BankLoginsEditor, LOGINS_SUBTITLE, SCHEDULE_SUBTITLE, ScrapeScheduleForm } from '../components/BankLogins';
 import { AccountSelect, CategorySelect, MemberSelect, PageHeader, Segmented } from '../components/ui';
 import { companyName } from '../components/ScrapeButton';
-import { GeminiSetup, KiroSetup } from '../components/AgentSetup';
+import { GeminiSetup, KiroSetup, ModelPicker } from '../components/AgentSetup';
 
 interface FxRow { currency: string; rate_to_ils: number; date: string; source: string }
 
@@ -99,6 +99,11 @@ export default function Settings() {
           {meta.settings.agent_provider === 'gemini' && <GeminiSetup />}
           {meta.settings.agent_provider === 'kiro' && <KiroSetup />}
         </div>
+        {(() => {
+          const provider = (meta.settings.agent_provider ?? 'claude') as AgentProvider;
+          const key = `agent_model_${provider}`;
+          return <ModelPicker key={provider} provider={provider} value={meta.settings[key] ?? ''} onChange={id => saveSettings.mutate({ [key]: id })} />;
+        })()}
       </Section>
 
       <Section id="members" title="בני הבית" icon={Users} color="var(--chart-6)" subtitle="השמות והצבעים שמופיעים בכל האפליקציה. ״משותף״ הוא ברירת המחדל לחשבונות ותנועות של כל הבית.">

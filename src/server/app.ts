@@ -6,7 +6,7 @@ import { analyticsRoutes } from './routes/analytics.js';
 import { eventRoutes } from './routes/events.js';
 import { categoryRoutes } from './routes/categories.js';
 import { AGENT_PROVIDERS, agentRoutes } from './agent.js';
-import { agentSetupRoutes } from './agentSetup.js';
+import { MODEL_SETTING_KEYS, agentSetupRoutes, isModelId } from './agentSetup.js';
 import { insuranceRoutes } from './routes/insurance.js';
 import { pensionRoutes } from './routes/pension.js';
 import { investmentRoutes } from './routes/investments.js';
@@ -68,7 +68,7 @@ export function buildApp(db: DB, opts: Pick<ServerOptions, 'webDist'> = {}): Fas
 
   app.put('/api/settings', async (req, reply) => {
     const body = req.body as Record<string, string | number>;
-    const allowed = ['cycle_start_day', 'balance_buffer', 'category_api_url', 'scrape_months_back', 'agent_provider',
+    const allowed = ['cycle_start_day', 'balance_buffer', 'category_api_url', 'scrape_months_back', 'agent_provider', ...MODEL_SETTING_KEYS,
       // the desktop app: daily scrape and notifications
       'scrape_time', 'scrape_catch_up', 'notify_scrape', 'notify_alerts', 'onboarding_done'];
     if (body.scrape_time != null && !/^(([01]?\d|2[0-3]):[0-5]\d)?$/.test(String(body.scrape_time))) {
@@ -76,6 +76,9 @@ export function buildApp(db: DB, opts: Pick<ServerOptions, 'webDist'> = {}): Fas
     }
     if (body.agent_provider != null && !(AGENT_PROVIDERS as readonly string[]).includes(String(body.agent_provider))) {
       return reply.code(400).send({ error: `agent_provider must be one of ${AGENT_PROVIDERS.join(', ')}` });
+    }
+    for (const k of MODEL_SETTING_KEYS) {
+      if (body[k] != null && !isModelId(String(body[k]))) return reply.code(400).send({ error: `bad model id for ${k}` });
     }
     const months = body.scrape_months_back;
     if (months != null && !(Number.isInteger(Number(months)) && Number(months) >= 1 && Number(months) <= MAX_MONTHS_BACK)) {

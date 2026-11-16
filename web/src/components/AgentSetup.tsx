@@ -8,6 +8,62 @@ interface SetupStatus {
   gemini: { bundled: boolean; hasKey: boolean; keyFromEnv: boolean };
 }
 
+interface AgentModel { id: string; name: string; description?: string; contextTokens?: number; rate?: number }
+interface ModelList { models: AgentModel[]; defaultModel: string | null; error?: string; source?: string }
+
+const tokens = (n: number) => (n >= 1_000_000 ? `${Math.round(n / 100_000) / 10}M` : `${Math.round(n / 1000)}K`);
+
+/**
+ * The provider's models, as its own tool / account lists them right now, and the one the chat uses.
+ * Empty choice = the tool's default. Saved per provider (agent_model_<provider>).
+ */
+export function ModelPicker({ provider, value, onChange }: { provider: 'claude' | 'gemini' | 'kiro'; value: string; onChange: (id: string) => void }) {
+  const qc = useQueryClient();
+  const list = useQuery({
+    queryKey: ['agent-models', provider],
+    queryFn: () => api.get<ModelList>(`/agent/models?provider=${provider}`),
+    staleTime: 5 * 60_000,
+  });
+  const refresh = useMutation({
+    mutationFn: () => api.get<ModelList>(`/agent/models?provider=${provider}&refresh=1`),
+    onSuccess: data => qc.setQueryData(['agent-models', provider], data),
+  });
+  const data = list.data;
+  const models = data?.models ?? [];
+  const loading = list.isLoading || refresh.isPending;
+  // a saved model the list no longer offers (plan changed, model retired): keep showing it so it can be changed
+  const missing = value && !models.some(m => m.id === value) && !loading && models.length > 0;
+  const defaultName = data?.defaultModel ? (models.find(m => m.id === data.defaultModel)?.name ?? data.defaultModel) : null;
+  const selected = models.find(m => m.id === value);
+
+  return (
+    <div className="mt-4 max-w-3xl space-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">מודל</span>
+        <select className="input max-w-md" dir="ltr" value={value} disabled={loading && !models.length} onChange={e => onChange(e.target.value)}>
+          <option value="">{`ברירת המחדל${defaultName ? ` (${defaultName})` : ''}`}</option>
+          {missing && <option value={value}>{`${value} — לא זמין יותר`}</option>}
+          {models.map(m => (
+            <option key={m.id} value={m.id}>
+              {[m.name !== m.id ? `${m.name} (${m.id})` : m.id, m.rate != null ? `×${m.rate} קרדיטים` : null, m.contextTokens ? `${tokens(m.contextTokens)} הקשר` : null]
+                .filter(Boolean).join(' · ')}
+            </option>
+          ))}
+        </select>
+        {provider !== 'claude' && (
+          <button className="btn btn-sm" disabled={loading} onClick={() => refresh.mutate()}>{loading ? 'טוען…' : 'רענן רשימה'}</button>
+        )}
+      </div>
+      {data?.error && <p className="text-amber-700">{data.error}</p>}
+      {list.isError && <p className="text-red-600">{(list.error as Error).message}</p>}
+      {missing && <p className="text-amber-700">המודל שנבחר לא מופיע עכשיו ברשימה של החשבון. בחרו מודל אחר או את ברירת המחדל.</p>}
+      {selected?.description && <p className="text-zinc-500">{selected.description}</p>}
+      {provider === 'claude' && <p className="text-xs text-zinc-500">Claude Code לא מציג רשימה: אלה הכינויים שהוא מקבל, וכל אחד מהם הוא הגרסה העדכנית של אותה משפחה.</p>}
+      {provider === 'kiro' && models.length > 0 && <p className="text-xs text-zinc-500">הרשימה היא מה שהחשבון שלך ב-Kiro מאפשר כרגע. ״×2 קרדיטים״ = כל שאלה עולה פי 2 מהבסיס.</p>}
+    </div>
+  );
+}
+
 const Dot = ({ ok }: { ok: boolean }) => <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${ok ? 'bg-green-500' : 'bg-amber-500'}`} />;
 
 function useSetup() {

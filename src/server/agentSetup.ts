@@ -123,7 +123,7 @@ function startKiroLogin(deviceFlow = false): TaskState {
     clearTimeout(timer);
     if (kiroLoginProc === child) kiroLoginProc = null;
     kiroCache = null;
-    if (code === 0 || /already logged in/i.test(out)) kiroLogin = { state: 'success' };
+    if (code === 0 || /already logged in/i.test(out)) { kiroLogin = { state: 'success' }; modelCache.delete('kiro'); }
     else if (!deviceFlow && /failed to open browser|use-device-flow/i.test(out)) startKiroLogin(true);
     else if (kiroLogin.state === 'running') {
       kiroLogin = { state: 'error', message: /network|connect|timed? ?out|ENOTFOUND|ECONN/i.test(out)
@@ -184,6 +184,7 @@ export function geminiApiKey(): string | null {
 }
 
 function saveGeminiKey(key: string | null): void {
+  for (const k of modelCache.keys()) if (k.startsWith('gemini:')) modelCache.delete(k);
   const file = GEMINI_KEY_FILE();
   if (!key) { rmSync(file, { force: true }); return; }
   mkdirSync(dirname(file), { recursive: true });
@@ -221,6 +222,150 @@ async function checkGeminiKey(key: string): Promise<'ok' | 'invalid' | 'offline'
   }
 }
 
+// ---- models -------------------------------------------------------------------------------------------------------
+
+export interface AgentModel {
+  id: string;
+  name: string;
+  description?: string;
+  /** context window, tokens */
+  contextTokens?: number;
+  /** Kiro: credits per request relative to the base rate (e.g. 2 = twice) */
+  rate?: number;
+}
+export interface ModelList { models: AgentModel[]; defaultModel: string | null; error?: string; source?: string }
+
+const MODEL_CACHE_MS = 10 * 60_000;
+const modelCache = new Map<string, { at: number; value: ModelList }>();
+const cached = async (key: string, force: boolean, load: () => Promise<ModelList>): Promise<ModelList> => {
+  const hit = modelCache.get(key);
+  if (!force && hit && Date.now() - hit.at < MODEL_CACHE_MS) return hit.value;
+  const value = await load();
+  if (!value.error) modelCache.set(key, { at: Date.now(), value });
+  return value;
+};
+
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
+/** Kiro: `kiro-cli chat --list-models --format json` — the account's models right now, with credits and context (no credits used). */
+async function kiroModelsFromCli(kiro: string): Promise<ModelList | null> {
+  const r = await run(kiro, ['chat', '--list-models', '--format', 'json'], kiroEnv(kiro), 60_000);
+  const line = stripAnsi(r.out).split('\n').map(l => l.trim()).reverse().find(l => l.startsWith('{'));
+  if (r.code !== 0 || !line) return null;
+  try {
+    const j = JSON.parse(line) as { models?: Record<string, unknown>[]; default_model?: string };
+    const models = (j.models ?? []).map(m => ({
+      id: String(m.model_id ?? m.modelId ?? m.id ?? ''),
+      name: String(m.model_name ?? m.name ?? m.model_id ?? m.id ?? ''),
+      description: typeof m.description === 'string' ? m.description : undefined,
+      contextTokens: num(m.context_window_tokens),
+      rate: num(m.rate_multiplier),
+    })).filter(m => m.id);
+    return models.length ? { models, defaultModel: j.default_model ? String(j.default_model) : null, source: 'cli' } : null;
+  } catch { return null; }
+}
+
+/** Kiro fallback: the models a new ACP session offers (`kiro-cli acp` → initialize → session/new). */
+function kiroModelsFromAcp(kiro: string): Promise<ModelList | null> {
+  return new Promise(resolve => {
+    const child = spawn(kiro, ['acp'], { env: kiroEnv(kiro), windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], cwd: homedir() });
+    let buf = '', done = false;
+    const finish = (v: ModelList | null) => { if (done) return; done = true; clearTimeout(timer); child.kill(); resolve(v); };
+    const timer = setTimeout(() => finish(null), 60_000);
+    const send = (id: number, method: string, params: object) => child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+    child.on('error', () => finish(null));
+    child.on('close', () => finish(null));
+    child.stdout.on('data', d => {
+      buf += d.toString();
+      let n: number;
+      while ((n = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, n).trim();
+        buf = buf.slice(n + 1);
+        let m: { id?: number; result?: Record<string, any>; error?: unknown };
+        try { m = JSON.parse(line); } catch { continue; }
+        if (m.id === 1) {
+          if (m.error) return finish(null);
+          send(2, 'session/new', { cwd: homedir(), mcpServers: [] });
+        } else if (m.id === 2) {
+          const models = m.result?.models;
+          if (m.error || !Array.isArray(models?.availableModels)) return finish(null);
+          finish({
+            models: models.availableModels.map((x: Record<string, unknown>) => ({
+              id: String(x.modelId ?? x.id), name: String(x.name ?? x.modelId ?? x.id),
+              description: typeof x.description === 'string' ? x.description : undefined,
+            })),
+            defaultModel: models.currentModelId ?? null,
+            source: 'acp',
+          });
+        }
+      }
+    });
+    send(1, 'initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+      clientInfo: { name: 'familycfo', version: '1' } });
+  });
+}
+
+async function kiroModels(force: boolean): Promise<ModelList> {
+  const kiro = findKiro();
+  if (!kiro) return { models: [], defaultModel: null, error: 'Kiro CLI לא מותקן' };
+  // signed out, these commands start a sign-in of their own (and wait for it): check first
+  if (!(await kiroStatus(force)).loggedIn) return { models: [], defaultModel: null, error: 'Kiro לא מחובר — התחברו כדי לראות את המודלים' };
+  return cached('kiro', force, async () => (await kiroModelsFromCli(kiro)) ?? (await kiroModelsFromAcp(kiro))
+    ?? { models: [], defaultModel: null, error: 'Kiro לא החזיר רשימת מודלים. נסו שוב בעוד רגע' });
+}
+
+/** Gemini: the models the key may use (Google's model list; no tokens used), only those that can chat. */
+async function geminiModels(force: boolean): Promise<ModelList> {
+  const key = geminiApiKey();
+  if (!key) return { models: [], defaultModel: null, error: 'הזינו מפתח Gemini כדי לראות את המודלים' };
+  return cached(`gemini:${key.slice(-6)}`, force, async () => {
+    try {
+      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', {
+        headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) return { models: [], defaultModel: null, error: `Google לא החזירה את רשימת המודלים (${res.status})` };
+      const j = await res.json() as { models?: { name: string; displayName?: string; description?: string; inputTokenLimit?: number; supportedGenerationMethods?: string[] }[] };
+      const models = (j.models ?? [])
+        .filter(m => m.name.startsWith('models/gemini') && m.supportedGenerationMethods?.includes('generateContent'))
+        // speech / image / live / embedding variants can't answer a text chat with tools
+        .filter(m => !/(tts|image|live|audio|embedding|native-audio|robotics|computer-use|transcribe|banana)/i.test(m.name))
+        .map(m => ({ id: m.name.replace(/^models\//, ''), name: m.displayName ?? m.name, description: m.description, contextTokens: m.inputTokenLimit }))
+        .sort((a, b) => b.id.localeCompare(a.id, 'en', { numeric: true }));
+      return { models, defaultModel: GEMINI_DEFAULT_MODEL, source: 'api' };
+    } catch {
+      return { models: [], defaultModel: null, error: 'אין חיבור ל-Google כרגע' };
+    }
+  });
+}
+
+/**
+ * The model the chat uses when none was picked. Not the CLI's own default (gemini-2.5-pro): a free API key usually has
+ * no quota for Pro, so the chat would fail out of the box. The \-latest\ alias follows Google's current Flash.
+ */
+export const GEMINI_DEFAULT_MODEL = 'gemini-flash-latest';
+
+/** Claude Code has no list command; these are the names it accepts for the newest model of each family. */
+function claudeModels(): ModelList {
+  return {
+    models: [
+      { id: 'opus', name: 'Opus', description: 'החזק ביותר, איטי ויקר יותר במכסת המנוי' },
+      { id: 'sonnet', name: 'Sonnet', description: 'מאוזן — מהיר ומדויק' },
+      { id: 'haiku', name: 'Haiku', description: 'המהיר והחסכוני ביותר' },
+    ],
+    defaultModel: null,
+    source: 'aliases',
+  };
+}
+
+export async function listModels(provider: 'claude' | 'gemini' | 'kiro', force = false): Promise<ModelList> {
+  return provider === 'kiro' ? kiroModels(force) : provider === 'gemini' ? geminiModels(force) : claudeModels();
+}
+
+/** Setting key of the model chosen for a provider (empty / missing = the tool's own default). */
+export const modelSettingKey = (provider: string) => `agent_model_${provider}`;
+export const MODEL_SETTING_KEYS = ['agent_model_claude', 'agent_model_gemini', 'agent_model_kiro'];
+export const isModelId = (v: string) => /^[\w.:/@-]{0,120}$/.test(v);
+
 // ---- routes ---------------------------------------------------------------------------------------------------------
 
 export function agentSetupRoutes(app: FastifyInstance): void {
@@ -231,6 +376,12 @@ export function agentSetupRoutes(app: FastifyInstance): void {
       kiro: { ...(await kiroStatus(force)), login: kiroLogin, install: kiroInstall },
       gemini: { bundled: gemini.command !== 'gemini', hasKey: !!geminiApiKey(), keyFromEnv: !!process.env.GEMINI_API_KEY },
     };
+  });
+
+  app.get('/api/agent/models', async (req, reply) => {
+    const q = req.query as { provider?: string; refresh?: string };
+    if (q.provider !== 'claude' && q.provider !== 'gemini' && q.provider !== 'kiro') return reply.code(400).send({ error: 'provider must be claude, gemini or kiro' });
+    return listModels(q.provider, q.refresh === '1');
   });
 
   app.post('/api/agent/kiro/login', async req => startKiroLogin((req.body as { deviceFlow?: boolean } | null)?.deviceFlow === true));

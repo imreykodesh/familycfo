@@ -8,7 +8,7 @@ import type { DB } from '../db/connection.js';
 import { cycleStartDay, getSetting, today } from '../analytics/common.js';
 import { POLICIES_DIR, REPORTS_DIR } from './routes/insurance.js';
 import { APP_DIR, IN_DESKTOP, dataPath } from '../paths.js';
-import { findKiro, geminiApiKey, geminiCommand, kiroEnv } from './agentSetup.js';
+import { GEMINI_DEFAULT_MODEL, findKiro, geminiApiKey, geminiCommand, isModelId, kiroEnv, modelSettingKey } from './agentSetup.js';
 import { dataCoverage } from '../analytics/balances.js';
 
 /**
@@ -55,6 +55,12 @@ from the policy fields in api /insurance, say that the document itself wasn't re
 You can't open files: the insurance documents and imported reports aren't available in this setup. For a coverage question, answer
 from the policy fields in api /insurance, say that the document itself wasn't read, and suggest the Claude option in Settings for it.`,
 };
+
+/** `--model <id>` when the user picked one in Settings; nothing = the tool's own default. All three CLIs take --model. */
+function modelArgs(db: DB, provider: AgentProvider): string[] {
+  const model = getSetting(db, modelSettingKey(provider), '').trim() || (provider === 'gemini' ? GEMINI_DEFAULT_MODEL : '');
+  return model && isModelId(model) ? ['--model', model] : [];
+}
 
 function coverageText(db: DB): string {
   const rows = dataCoverage(db);
@@ -184,6 +190,7 @@ function startClaude(db: DB, message: string, sessionId: string | undefined): Ru
     '--strict-mcp-config', '--mcp-config', JSON.stringify({ mcpServers: { household: householdServer() } }),
     '--allowedTools', 'mcp__household__api,mcp__household__sql,Skill,Read(./docs/**)',
     '--system-prompt', systemPrompt(db, 'claude'),
+    ...modelArgs(db, 'claude'),
     ...(sessionId ? ['--resume', sessionId] : []),
   ];
   const child = spawn(process.env.CLAUDE_PATH || 'claude', args, { cwd: WORKDIR, env: claudeEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
@@ -216,6 +223,14 @@ function startClaude(db: DB, message: string, sessionId: string | undefined): Ru
  * (`tools.core`), only the household MCP server (trusted: no confirmation, which headless can't ask for), and the skills;
  * GEMINI_SYSTEM_MD replaces Gemini's coding-agent system prompt with ours.
  */
+/** Gemini CLI 0.68's built-in tools (its *_TOOL_NAME constants), all but activate_skill: no files, shell, web, agents. */
+const GEMINI_BUILTIN_TOOLS = [
+  'ask_user', 'complete_task', 'enter_plan_mode', 'exit_plan_mode', 'get_internal_docs', 'glob', 'google_web_search', 'grep_search',
+  'invoke_agent', 'list_directory', 'list_mcp_resources', 'read_file', 'read_many_files', 'read_mcp_resource', 'replace',
+  'run_shell_command', 'save_memory', 'search_file_content', 'take_snapshot', 'tracker_add_dependency', 'tracker_create_task',
+  'tracker_get_task', 'tracker_list_tasks', 'tracker_update_task', 'tracker_visualize', 'update_topic', 'web_fetch', 'write_file', 'write_todos',
+];
+
 function startGemini(db: DB, message: string, sessionId: string | undefined): Run {
   rmSync(join(GEMINI_DIR, '.gemini'), { recursive: true, force: true });
   mkdirSync(join(GEMINI_DIR, '.gemini'), { recursive: true });
@@ -224,7 +239,9 @@ function startGemini(db: DB, message: string, sessionId: string | undefined): Ru
   writeFileSync(join(GEMINI_DIR, '.gemini', 'settings.json'), JSON.stringify({
     // the API key the user saved in the app (Google ended the free "sign in with Google" for third-party clients)
     security: { auth: { selectedType: 'gemini-api-key' } },
-    tools: { core: ['activate_skill'] },
+    // every built-in tool off except activate_skill. (`tools.core: ['activate_skill']` also hides the MCP tools from the
+    // model in CLI 0.68 — it then invents tool names and can't read the data.) The list is CLI 0.68's built-ins.
+    tools: { exclude: GEMINI_BUILTIN_TOOLS },
     mcp: { allowed: ['household'] },
     mcpServers: { household: { ...householdServer(), trust: true, includeTools: ['api', 'sql'] } },
   }, null, 2));
@@ -233,6 +250,7 @@ function startGemini(db: DB, message: string, sessionId: string | undefined): Ru
 
   const args = [
     '--output-format', 'stream-json', '--allowed-mcp-server-names', 'household', '--extensions', 'none', '--skip-trust',
+    ...modelArgs(db, 'gemini'),
     ...(sessionId ? ['--resume', sessionId] : []),
   ];
   const gemini = geminiCommand();
@@ -269,7 +287,12 @@ function startGemini(db: DB, message: string, sessionId: string | undefined): Ru
       } else if (ev.type === 'result') {
         const raw = ev.status === 'error' ? readableError(String(ev.error?.message || errors.join('\n') || 'error')) : null;
         emit({ type: 'done', sessionId: session,
-          error: raw && /API key not valid|API_KEY_INVALID/i.test(raw) ? 'מפתח Gemini לא תקין. החליפו אותו בהגדרות ← עוזר AI' : raw });
+          error: !raw ? null
+            : /API key not valid|API_KEY_INVALID/i.test(raw) ? 'מפתח Gemini לא תקין. החליפו אותו בהגדרות ← עוזר AI'
+            : /exhausted your daily quota|quota|RESOURCE_EXHAUSTED|429/i.test(raw)
+              ? 'נגמרה המכסה היומית החינמית של המפתח למודל הזה. בחרו מודל אחר בהגדרות ← עוזר AI ← מודל (למשל Flash), או נסו שוב מחר'
+            : /not found|is not supported|NOT_FOUND/i.test(raw) ? 'המודל שנבחר לא זמין למפתח הזה. בחרו מודל אחר בהגדרות ← עוזר AI ← מודל'
+            : raw });
         return true;
       }
       return false;
@@ -304,7 +327,7 @@ function startKiro(db: DB, message: string, sessionId: string | undefined): Run 
   }, null, 2));
 
   const args = ['chat', '--v3', '--no-interactive', '--agent', 'household', '--trust-tools=@household', '--require-mcp-startup',
-    '--wrap', 'never', ...(resume ? ['--resume'] : [])];
+    '--wrap', 'never', ...modelArgs(db, 'kiro'), ...(resume ? ['--resume'] : [])];
   const kiro = findKiro();
   if (!kiro) throw new Error('Kiro CLI לא מותקן. אפשר להתקין אותו מההגדרות ← עוזר AI');
   const child = spawn(kiro, args, { cwd: dir, env: kiroEnv(kiro), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
