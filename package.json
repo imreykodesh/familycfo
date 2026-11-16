@@ -24,7 +24,8 @@
     "demo": "tsx src/demo.ts",
     "dev:demo": "BANK_DB=demo.db npm run dev",
     "build": "node scripts/build.mjs",
-    "serve": "SERVE_WEB=1 tsx src/server/index.ts"
+    "serve": "tsx src/server/index.ts --serve-web",
+    "app": "node scripts/start.mjs"
   },
   "dependencies": {
     "@fastify/static": "^10.1.11",
