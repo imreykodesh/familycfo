@@ -78,7 +78,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `ingest/classify.ts` | כללים → מטמון → קטגוריית חברת האשראי → API; `deriveKinds` |
 | `ingest/transfers.ts` | התאמת חיובי כרטיס והעברות בין חשבונות |
 | `import/pensionReport.ts`, `import/insurancePolicies.ts` | ייבוא דוחות JSON (`importPensionReport`, `importInsurance`) — משורת הפקודה או מה-API |
-| `agent/mcp.ts` | שרת ה-MCP של הצ'אט: `api` (GET מרשימה), `sql` (קריאה בלבד), `change` (שינוי דרך ה-API, מרשימה) |
+| `agent/mcp.ts` | שרת ה-MCP של הצ'אט: `api` (GET מרשימה), `sql` (קריאה בלבד), `change` (שינוי דרך ה-API, מרשימה), `read_document` (ל-Gemini / Kiro: מסמכים מ-`data/policies` ו-`data/reports` בלבד) |
 | `agent/guard-read.mjs` | מגביל את `Read` של Claude לעותק `docs/` |
 
 ### `src/analytics/` — פונקציות טהורות
@@ -243,13 +243,13 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `AGENT_PROVIDER`, `CLAUDE_PATH`, `KIRO_PATH`, `GEMINI_API_KEY` | הצ'אט |
 | `LOG_DIR`, `LOG_KEEP_DAYS`, `LOG_LEVEL` | יומן |
 | `POLICIES_DIR`, `REPORTS_DIR`, `BROWSER_DIR`, `CATEGORY_API_URL` | תיקיות ושירותים |
-| `HOUSEHOLD_HOME`, `HOUSEHOLD_APP_DIR`, `HOUSEHOLD_DESKTOP`, `HOUSEHOLD_WEB_DIST`, `HOUSEHOLD_MCP_SCRIPT`, `HOUSEHOLD_GEMINI_SCRIPT`, `HOUSEHOLD_IMPORT_FROM`, `HOUSEHOLD_API` | פנימיים לדסקטופ ולצ'אט |
+| `HOUSEHOLD_HOME`, `HOUSEHOLD_APP_DIR`, `HOUSEHOLD_DESKTOP`, `HOUSEHOLD_WEB_DIST`, `HOUSEHOLD_MCP_SCRIPT`, `HOUSEHOLD_GEMINI_SCRIPT`, `HOUSEHOLD_IMPORT_FROM`, `HOUSEHOLD_API`, `HOUSEHOLD_DOC_MODE`, `HOUSEHOLD_POLICIES_DIR`, `HOUSEHOLD_REPORTS_DIR` | פנימיים לדסקטופ ולצ'אט |
 
 ---
 
 ## תלויות חיצוניות מרכזיות
 
-שרת: `fastify`, `better-sqlite3`, `israeli-bank-scrapers`, `puppeteer` / `@puppeteer/browsers`, `node-cron`, `zod`, `electron-updater`.
+שרת: `fastify`, `better-sqlite3`, `unpdf` (טקסט מ-PDF לצ'אט עם Kiro), `israeli-bank-scrapers`, `puppeteer` / `@puppeteer/browsers`, `node-cron`, `zod`, `electron-updater`.
 פיתוח ובנייה: `typescript`, `tsx`, `vitest`, `concurrently`, `electron`, `electron-builder`, `esbuild`, `@google/gemini-cli` (נארז עם הדסקטופ).
 ממשק (`web/package.json`): `react`, `react-router-dom`, `@tanstack/react-query`, `tailwindcss`, `radix-ui`, `lucide-react`, `motion`, `recharts`.
 שירותים מבחוץ: הבנקים וחברות האשראי, בנק ישראל (שערים), Yahoo Finance (סמלים בלבד), ספק ה-AI שנבחר, `category_api_url` אם הוגדר.

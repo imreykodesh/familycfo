@@ -1,6 +1,5 @@
 import { useRef, useState, type DragEvent } from 'react';
-import { Link } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, FileUp } from 'lucide-react';
 import { api } from '../api';
 import { askAgent } from './AgentChat';
@@ -56,8 +55,6 @@ function ImportDocuments({ kind, onClose }: { kind: Kind; onClose: () => void })
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const agent = useQuery({ queryKey: ['agent'], queryFn: () => api.get<{ provider: string }>('/agent'), staleTime: 60_000 });
-  const canRead = (agent.data?.provider ?? 'claude') === 'claude';
 
   const run = useMutation({
     mutationFn: async (files: File[]) => {
@@ -93,7 +90,7 @@ function ImportDocuments({ kind, onClose }: { kind: Kind; onClose: () => void })
     },
     onSuccess: ({ paths, sendToAgent }) => {
       for (const k of ['pension', 'insurance', 'liabilities', 'networth', 'assets', 'summary']) qc.invalidateQueries({ queryKey: [k] });
-      if (sendToAgent && canRead) {
+      if (sendToAgent) {
         onClose();
         askAgent(`${t.ask}: ${paths.map(p => `\`${p}\``).join(', ')}`, true);
       }
@@ -123,16 +120,10 @@ function ImportDocuments({ kind, onClose }: { kind: Kind; onClose: () => void })
         <p className="text-xs text-fg-subtle">
           הקובץ נשמר אצלכם במחשב. העוזר (✨) קורא אותו, מכניס את הנתונים לאפליקציה ומראה מה נכנס. ייבוא חוזר של אותו דוח מעדכן ולא משכפל.
         </p>
-        {!canRead && (
-          <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
-            קריאת מסמכים אפשרית רק כשהעוזר הוא Claude. אפשר לבחור אותו ב<Link to="/settings" className="underline" onClick={onClose}>הגדרות</Link>.
-          </p>
-        )}
         {run.error && <ErrorBox error={run.error} />}
-        {done && (done.results.length > 0 || (done.sendToAgent && !canRead)) && (
+        {done && done.results.length > 0 && (
           <div className="space-y-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-200">
             {done.results.map(r => <div key={r} className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 shrink-0" />{r}</div>)}
-            {done.sendToAgent && !canRead && <div>הקובץ נשמר. כדי שהנתונים ייכנסו, צריך לבחור את Claude בהגדרות ואז לייבא שוב.</div>}
           </div>
         )}
       </div>
