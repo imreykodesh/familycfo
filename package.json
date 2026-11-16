@@ -1,6 +1,6 @@
 {
   "name": "familycfo",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "FamilyCFO — a local-first CFO for Israeli families: scrapes your banks and credit cards, then shows cash flow, budgets, forecast, net worth, insurance, pension and a stock portfolio, with an optional AI chat over your own data.",
   "license": "MIT",
   "private": true,
@@ -33,12 +33,13 @@
     "better-sqlite3": "^13.0.3",
     "electron-updater": "^6.8.9",
     "fastify": "^5.12.5",
-    "israeli-bank-scrapers": "^6.12.2",
+    "israeli-bank-scrapers": "^6.13.0",
     "node-cron": "^3.0.3",
     "puppeteer": "^24.37.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@google/gemini-cli": "0.68.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
     "@types/node-cron": "^3.0.11",

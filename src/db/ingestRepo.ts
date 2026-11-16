@@ -36,7 +36,12 @@ export function saveScrapedAccount(db: DB, companyId: string, account: ScrapedAc
 
   const balance = account.balance
     ?? (account as { info?: { futureChargesTotal?: number } }).info?.futureChargesTotal ?? 0;
-  db.prepare(`INSERT INTO balances (account_id, balance) VALUES (?, ?)`).run(accountId, balance);
+  // some scrapers (Mizrahi) sometimes return NaN / a non-number: keep the last known balance instead of failing the scrape
+  if (typeof balance === 'number' && Number.isFinite(balance)) {
+    db.prepare(`INSERT INTO balances (account_id, balance) VALUES (?, ?)`).run(accountId, balance);
+  } else {
+    console.warn(`  ${accountId}: the bank returned no valid balance (${String(balance)}); keeping the last one`);
+  }
 
   const result = saveTransactions(db, normalizeTransactions(accountId, account.txns ?? []));
   return { accountId, ...result };

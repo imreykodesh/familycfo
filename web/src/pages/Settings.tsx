@@ -11,6 +11,7 @@ import { desktop } from '../desktop';
 import { BankLoginsEditor, LOGINS_SUBTITLE, SCHEDULE_SUBTITLE, ScrapeScheduleForm } from '../components/BankLogins';
 import { AccountSelect, CategorySelect, MemberSelect, PageHeader, Segmented } from '../components/ui';
 import { companyName } from '../components/ScrapeButton';
+import { GeminiSetup, KiroSetup } from '../components/AgentSetup';
 
 interface FxRow { currency: string; rate_to_ils: number; date: string; source: string }
 
@@ -88,13 +89,15 @@ export default function Settings() {
             Claude Code (<code dir="ltr">claude</code>) עם המנוי שלך. היחיד שיכול גם לפתוח את מסמכי הביטוח והדוחות שהעלית.
           </>}
           {meta.settings.agent_provider === 'gemini' && <>
-            Gemini CLI: התקנה ב-<code dir="ltr">npm install -g @google/gemini-cli</code>, ואז הרצה אחת של <code dir="ltr">gemini</code> בטרמינל
-            כדי להתחבר עם חשבון Google (או להגדיר <code dir="ltr">GEMINI_API_KEY</code>). העוזר לא פותח מסמכים — רק את הנתונים.
+            Gemini של Google. העוזר לא פותח מסמכים — רק את הנתונים.
           </>}
           {meta.settings.agent_provider === 'kiro' && <>
-            Kiro CLI: התקנה מ-<span dir="ltr">kiro.dev/cli</span>, ומפתח API של Kiro במשתנה <code dir="ltr">KIRO_API_KEY</code> לפני
-            <code dir="ltr"> npm run dev</code> (מצב לא-אינטראקטיבי דורש מפתח). העוזר לא פותח מסמכים — רק את הנתונים.
+            Kiro עם החשבון שלך. העוזר לא פותח מסמכים — רק את הנתונים.
           </>}
+        </div>
+        <div className="mt-3">
+          {meta.settings.agent_provider === 'gemini' && <GeminiSetup />}
+          {meta.settings.agent_provider === 'kiro' && <KiroSetup />}
         </div>
       </Section>
 

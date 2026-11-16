@@ -2,12 +2,13 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import { randomUUID } from 'crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import type { FastifyInstance } from 'fastify';
 import type { DB } from '../db/connection.js';
 import { cycleStartDay, getSetting, today } from '../analytics/common.js';
 import { POLICIES_DIR, REPORTS_DIR } from './routes/insurance.js';
 import { APP_DIR, IN_DESKTOP, dataPath } from '../paths.js';
+import { findKiro, geminiApiKey, geminiCommand, kiroEnv } from './agentSetup.js';
 
 /**
  * The data chat: each message runs one of the user's own AI command-line tools — Claude Code (`claude -p`),
@@ -111,7 +112,8 @@ let apiPort = Number(process.env.PORT ?? 4310);
 /** The read-only MCP server: from source with tsx, or (desktop app) the bundled build/desktop/mcp.mjs run by Electron's Node. */
 function mcpCommand(): { command: string; args: string[] } {
   if (process.env.HOUSEHOLD_MCP_SCRIPT) return { command: process.execPath, args: [process.env.HOUSEHOLD_MCP_SCRIPT] };
-  return { command: join(APP_DIR, 'node_modules', '.bin', 'tsx'), args: [join(APP_DIR, 'src', 'agent', 'mcp.ts')] };
+  // tsx's own CLI script run by this Node: node_modules/.bin/tsx is a shell script that Windows can't spawn directly
+  return { command: process.execPath, args: [join(APP_DIR, 'node_modules', 'tsx', 'dist', 'cli.mjs'), join(APP_DIR, 'src', 'agent', 'mcp.ts')] };
 }
 
 /** The read-only household MCP server, as every provider's config spells it. */
@@ -120,7 +122,7 @@ function householdServer() {
     ...mcpCommand(),
     env: {
       ...(IN_DESKTOP ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
-      BANK_DB: process.env.BANK_DB || dataPath('bank.db'),
+      BANK_DB: process.env.BANK_DB ? resolve(process.env.BANK_DB) : dataPath('bank.db'),
       HOUSEHOLD_API: `http://127.0.0.1:${apiPort}`,
     },
   };
@@ -208,7 +210,10 @@ function startGemini(db: DB, message: string, sessionId: string | undefined): Ru
   rmSync(join(GEMINI_DIR, '.gemini'), { recursive: true, force: true });
   mkdirSync(join(GEMINI_DIR, '.gemini'), { recursive: true });
   cpSync(SKILLS_DIR, join(GEMINI_DIR, '.gemini', 'skills'), { recursive: true });
+  if (!geminiApiKey()) throw new Error('חסר מפתח Gemini API. הדביקו אותו בהגדרות ← עוזר AI (מקבלים אותו בחינם ב-aistudio.google.com/apikey)');
   writeFileSync(join(GEMINI_DIR, '.gemini', 'settings.json'), JSON.stringify({
+    // the API key the user saved in the app (Google ended the free "sign in with Google" for third-party clients)
+    security: { auth: { selectedType: 'gemini-api-key' } },
     tools: { core: ['activate_skill'] },
     mcp: { allowed: ['household'] },
     mcpServers: { household: { ...householdServer(), trust: true, includeTools: ['api', 'sql'] } },
@@ -220,9 +225,14 @@ function startGemini(db: DB, message: string, sessionId: string | undefined): Ru
     '--output-format', 'stream-json', '--allowed-mcp-server-names', 'household', '--extensions', 'none', '--skip-trust',
     ...(sessionId ? ['--resume', sessionId] : []),
   ];
-  const child = spawn('gemini', args, {
-    cwd: GEMINI_DIR, stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, GEMINI_SYSTEM_MD: systemFile, GEMINI_CLI_TRUST_WORKSPACE: 'true' },
+  const gemini = geminiCommand();
+  const apiKey = geminiApiKey();
+  const child = spawn(gemini.command, [...gemini.args, ...args], {
+    cwd: GEMINI_DIR, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
+    env: {
+      ...process.env, ...gemini.env, GEMINI_SYSTEM_MD: systemFile, GEMINI_CLI_TRUST_WORKSPACE: 'true',
+      ...(apiKey ? { GEMINI_API_KEY: apiKey } : {}),
+    },
   });
   // no prompt argument: in headless mode the question is read from stdin
   child.stdin.end(message);
@@ -247,7 +257,9 @@ function startGemini(db: DB, message: string, sessionId: string | undefined): Ru
       } else if (ev.type === 'error' && ev.severity === 'error') {
         errors.push(String(ev.message ?? ''));
       } else if (ev.type === 'result') {
-        emit({ type: 'done', sessionId: session, error: ev.status === 'error' ? readableError(String(ev.error?.message || errors.join('\n') || 'error')) : null });
+        const raw = ev.status === 'error' ? readableError(String(ev.error?.message || errors.join('\n') || 'error')) : null;
+        emit({ type: 'done', sessionId: session,
+          error: raw && /API key not valid|API_KEY_INVALID/i.test(raw) ? 'מפתח Gemini לא תקין. החליפו אותו בהגדרות ← עוזר AI' : raw });
         return true;
       }
       return false;
@@ -283,7 +295,9 @@ function startKiro(db: DB, message: string, sessionId: string | undefined): Run 
 
   const args = ['chat', '--v3', '--no-interactive', '--agent', 'household', '--trust-tools=@household', '--require-mcp-startup',
     '--wrap', 'never', ...(resume ? ['--resume'] : [])];
-  const child = spawn('kiro-cli', args, { cwd: dir, env: { ...process.env, NO_COLOR: '1' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const kiro = findKiro();
+  if (!kiro) throw new Error('Kiro CLI לא מותקן. אפשר להתקין אותו מההגדרות ← עוזר AI');
+  const child = spawn(kiro, args, { cwd: dir, env: kiroEnv(kiro), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
   child.stdin.end(message);
   // eslint-disable-next-line no-control-regex
   const ansi = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07/g;
@@ -296,7 +310,12 @@ function startKiro(db: DB, message: string, sessionId: string | undefined): Run 
     },
     onClose(code, stderr, emit) {
       const clean = stderr.replace(ansi, '').trim();
-      emit({ type: 'done', sessionId: `kiro-${id}`, error: code === 0 ? null : clean.slice(-600) || `kiro-cli exited with code ${code}` });
+      // kiro-cli also logs [INFO] / warnings to stderr: show its error lines only
+      const errorLines = clean.split('\n').filter(l => /^error\b|error:/i.test(l.trim()) && !/^\[(INFO|ERROR)\]/.test(l.trim()));
+      const error = code === 0 ? null
+        : /not logged in|kiro-cli login/i.test(clean) ? 'Kiro לא מחובר. התחברו בהגדרות ← עוזר AI ← ״התחבר ל-Kiro״'
+        : (errorLines.join('\n') || clean.slice(-600)) || `kiro-cli exited with code ${code}`;
+      emit({ type: 'done', sessionId: `kiro-${id}`, error });
     },
   };
 }

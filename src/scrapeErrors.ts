@@ -23,12 +23,12 @@ const RULES: Rule[] = [
   {
     test: type => type === 'INVALID_PASSWORD',
     explain: { kind: 'login', retry: false, title: 'שם משתמש או סיסמה שגויים',
-      hint: 'בדקו את פרטי ההתחברות בקובץ accounts.json מול האתר של הבנק. אחרי כמה ניסיונות שגויים הבנק עלול לחסום את המשתמש.' },
+      hint: 'בדקו את פרטי ההתחברות (הגדרות ← חשבונות בנק וכרטיסי אשראי) מול האתר של הבנק. אחרי כמה ניסיונות שגויים הבנק עלול לחסום את המשתמש.' },
   },
   {
     test: type => type === 'CHANGE_PASSWORD',
     explain: { kind: 'login', retry: false, title: 'הבנק מבקש להחליף סיסמה',
-      hint: 'היכנסו לאתר הבנק בדפדפן, החליפו סיסמה, ועדכנו את הסיסמה החדשה ב-accounts.json.' },
+      hint: 'היכנסו לאתר הבנק בדפדפן, החליפו סיסמה, ועדכנו את הסיסמה החדשה בהגדרות ← חשבונות בנק וכרטיסי אשראי.' },
   },
   {
     test: type => type === 'ACCOUNT_BLOCKED',
@@ -68,12 +68,23 @@ const RULES: Rule[] = [
   {
     test: has(/accounts\.json|credentials|no such file|configuration/i),
     explain: { kind: 'setup', retry: false, title: 'בעיה בהגדרות ההתחברות',
-      hint: 'בדקו שהקובץ accounts.json קיים ותקין (ראו accounts.example.json), ושה-companyId נכון.' },
+      hint: 'בדקו את פרטי הבנק בהגדרות ← חשבונות בנק וכרטיסי אשראי (או בקובץ accounts.json כשמריצים מהקוד).' },
+  },
+  {
+    // our own database refused what was scraped: a bug in the app, not the bank
+    test: has(/SqliteError|SQLITE_|constraint failed/i),
+    explain: { kind: 'setup', retry: true, title: 'תקלה פנימית בשמירת הנתונים',
+      hint: 'הבנק החזיר נתונים שהתוכנה לא ידעה לשמור. זו תקלה בתוכנה ולא בבנק — עדכנו לגרסה חדשה של FamilyCFO.' },
+  },
+  {
+    test: has(/frame was detached|target closed|session closed|browser has disconnected|net::ERR_/i),
+    explain: { kind: 'site', retry: true, title: 'החיבור לאתר הבנק נקטע',
+      hint: 'הדף של הבנק נסגר או התחלף באמצע הכניסה (קורה לפעמים בעומס או בתחזוקה). נסו שוב בעוד כמה דקות.' },
   },
   {
     test: has(/selector|waiting for|element|cannot read propert|undefined|null/i),
     explain: { kind: 'site', retry: true, title: 'האתר של הבנק השתנה או נטען באופן חלקי',
-      hint: 'אם זה חוזר כמה ימים ברצף, סביר שהבנק שינה את האתר וצריך לעדכן את israeli-bank-scrapers (npm update israeli-bank-scrapers).' },
+      hint: 'נסו שוב מאוחר יותר. אם זה חוזר כמה ימים ברצף, כנראה הבנק שינה את האתר — עדכנו לגרסה חדשה של FamilyCFO (שבה הסורק מעודכן).' },
   },
 ];
 

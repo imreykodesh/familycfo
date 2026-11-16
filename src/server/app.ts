@@ -6,6 +6,7 @@ import { analyticsRoutes } from './routes/analytics.js';
 import { eventRoutes } from './routes/events.js';
 import { categoryRoutes } from './routes/categories.js';
 import { AGENT_PROVIDERS, agentRoutes } from './agent.js';
+import { agentSetupRoutes } from './agentSetup.js';
 import { insuranceRoutes } from './routes/insurance.js';
 import { pensionRoutes } from './routes/pension.js';
 import { investmentRoutes } from './routes/investments.js';
@@ -102,6 +103,7 @@ export function buildApp(db: DB, opts: Pick<ServerOptions, 'webDist'> = {}): Fas
   eventRoutes(app, db);
   categoryRoutes(app, db);
   agentRoutes(app, db);
+  agentSetupRoutes(app);
   insuranceRoutes(app, db);
   pensionRoutes(app, db);
   investmentRoutes(app, db);

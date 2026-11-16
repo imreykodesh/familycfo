@@ -15,6 +15,8 @@ extraResources:
   - { from: web/dist, to: web }
   - { from: agent, to: agent }
   - { from: src/agent/guard-read.mjs, to: src/agent/guard-read.mjs }
+  # the chat's Gemini option, run by Electron's Node (src/server/agentSetup.ts): the user needs no Node / npm
+  - { from: node_modules/@google/gemini-cli, to: gemini-cli, filter: ['bundle/**', 'package.json'] }
   - { from: desktop/assets, to: assets, filter: ["trayTemplate*.png", "icon.png"] }
 # native modules can't load from inside the asar archive
 asarUnpack:
