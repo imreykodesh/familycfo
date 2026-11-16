@@ -291,7 +291,7 @@ function startGemini(db: DB, message: string, sessionId: string | undefined): Ru
             : /API key not valid|API_KEY_INVALID/i.test(raw) ? 'מפתח Gemini לא תקין. החליפו אותו בהגדרות ← עוזר AI'
             : /exhausted your daily quota|quota|RESOURCE_EXHAUSTED|429/i.test(raw)
               ? 'נגמרה המכסה היומית החינמית של המפתח למודל הזה. בחרו מודל אחר בהגדרות ← עוזר AI ← מודל (למשל Flash), או נסו שוב מחר'
-            : /not found|is not supported|NOT_FOUND/i.test(raw) ? 'המודל שנבחר לא זמין למפתח הזה. בחרו מודל אחר בהגדרות ← עוזר AI ← מודל'
+            : /not found|is not supported|NOT_FOUND|no longer available/i.test(raw) ? 'המודל שנבחר לא זמין למפתח הזה. בחרו מודל אחר בהגדרות ← עוזר AI ← מודל'
             : raw });
         return true;
       }
