@@ -33,7 +33,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | משיכה מהבנקים | `npm run scrape` | `SCRAPE_FROM=max` / תאריך, `SCRAPE_MONTHS`, `SCRAPE_ONLY`, `SHOW_BROWSER=0`, `SCHEDULE` |
 | עיבוד מחדש | `npm run pipeline` | |
 | מיגרציות | `npm run migrate` (רץ גם בכל פתיחה) | |
-| ייבוא דוחות | `npm run import:pension -- <json>` · `npm run import:insurance -- <json>` | `docs/importing.md` |
+| ייבוא דוחות | `npm run import:pension -- <json>` · `npm run import:insurance -- <json>` | `docs/importing.md`. למשתמש: כפתור „ייבוא דוח" בפנסיה, ביטוחים, הלוואות |
 | נתוני דמו | `npm run demo` → `demo.db` | |
 | שחרור גרסה | `version` ב-`package.json` → תגית `vX.Y.Z` → `.github/workflows/desktop.yml` | Actions רץ רק על תגית או ידנית |
 
@@ -77,7 +77,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `ingest/normalize.ts` | זהות תנועה ומניעת כפילויות, `localDate` |
 | `ingest/classify.ts` | כללים → מטמון → קטגוריית חברת האשראי → API; `deriveKinds` |
 | `ingest/transfers.ts` | התאמת חיובי כרטיס והעברות בין חשבונות |
-| `import/pensionReport.ts`, `import/insurancePolicies.ts` | ייבוא דוחות JSON |
+| `import/pensionReport.ts`, `import/insurancePolicies.ts` | ייבוא דוחות JSON (`importPensionReport`, `importInsurance`) — משורת הפקודה או מה-API |
 | `agent/mcp.ts` | שרת ה-MCP של הצ'אט: `api` (GET מרשימה), `sql` (קריאה בלבד), `change` (שינוי דרך ה-API, מרשימה) |
 | `agent/guard-read.mjs` | מגביל את `Read` של Claude לעותק `docs/` |
 
@@ -113,7 +113,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrapeJob.ts` | משיכה מהממשק: `startScrape({ from, showBrowser, checkOnly, loginIds })`, `submitOtp` |
 | `scheduler.ts` | משיכה יומית בשעה קבועה (`scrape_time`) |
 | `appEvents.ts` | אירועים לאפליקציית הדסקטופ (`emitAppEvent`) |
-| `routes/*.ts` | transactions, analytics, categories, events, insurance, pension, investments |
+| `routes/*.ts` | transactions, analytics, categories, events, insurance, pension, investments, reports (העלאת דוח וייבוא JSON) |
 
 ### `desktop/` — Electron
 | קובץ | תפקיד |
@@ -139,6 +139,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `components/AgentChat.tsx` | חלון הצ'אט: קישורים `/…`, תשובות מהירות `ask:…`, תגיות שינוי, רענון אחרי שינוי, `askAgent()` |
 | `components/AgentSetup.tsx` | בחירת מודל, חיבור Kiro / Gemini |
 | `components/BankLogins.tsx`, `MasterPassword.tsx` | פרטי כניסה לבנקים בדסקטופ |
+| `components/ImportDocuments.tsx` | כפתור „ייבוא דוח" (`ImportDocumentsButton`): PDF / תמונה → `data/reports` ← הצ'אט מייבא (skill `import-document`); JSON → ייבוא ישיר |
 | `components/ScrapeButton.tsx` | כפתור העדכון, OTP, "משיכת היסטוריה מלאה" |
 | `components/ManualEntry.tsx`, `ScheduledManager.tsx`, `CategoryReport.tsx`, `DayDetails.tsx`, `StartOfMonth.tsx` | טפסים ודוחות |
 | `pages/*.tsx` | מסך לכל נתיב (בטבלה הבאה) |
@@ -182,6 +183,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | קטגוריות ואירועים | `GET/POST categories`, `PATCH/DELETE categories/:id`, `events`, `events/:id`, `events/:id/candidates`, `POST events/:id/transactions` |
 | עסקים | `businesses/:id/report`, `businesses/:id/export.csv` |
 | ביטוח, פנסיה, השקעות | `insurance` (+מסמכים), `pension`, `investments` (+`holdings`, `refresh`, `search`, `quote`) |
+| ייבוא דוחות | `POST reports/upload?name=` (PDF / תמונה → `data/reports`), `POST pension/import`, `POST insurance/import` (JSON). הצ'אט רשאי רק `pension/import` |
 | משיכה | `GET/POST scrape` (`{showBrowser, from}`), `POST scrape/otp`, `POST scrape/check`, `GET scrape/companies`, `GET scrape/runs`, `GET logs`, `GET browser`, `POST browser/download`, `POST pipeline` |
 | צ'אט | `GET agent`, `POST agent/chat` (SSE), `GET agent/setup`, `GET agent/models`, `PUT/DELETE agent/gemini/key`, `POST agent/kiro/install`, `POST agent/kiro/login` |
 

@@ -73,6 +73,7 @@ At most 3 per answer, at the end, short labels.
 | Savings funds, assets, loans | `POST/PATCH /funds`, `/assets`, `/asset-snapshots` `{assetId, date, value}`, `/liabilities`, `/liability-snapshots` `{liabilityId, date, balance}` |
 | Members, account names / owners | `PATCH /members/ID` `{name?, color?}`, `PATCH /accounts/ID` `{displayName?, ownerMemberId?, billingBankAccountId?}` |
 | Insurance policies, stock holdings | `POST/PATCH/DELETE /insurance(/ID)` (fields as in `GET /insurance`), `POST/PATCH/DELETE /investments/holdings(/ID)` `{symbol, quantity, buyPrice?, buyDate?, broker?, ownerMemberId?}` |
+| Import a pension report the user uploaded (read from `./docs/reports/`) | `POST /pension/import` (the whole report as JSON — format in the `import-document` skill) |
 | Alerts, recommendations | `PATCH /alerts/ID` `{seen?, dismissed?}`, `POST /recommendations/state` `{key, state: "dismissed"/"snoozed"/"done"/null, until?}` |
 | Settings | `PUT /settings` `{cycle_start_day?, balance_buffer?, scrape_months_back?: 1-24}` — only these; the AI tool, models, schedule and the rest are changed by the user in Settings |
 | Re-run classification and alerts | `POST /pipeline` `{}` |
@@ -86,7 +87,8 @@ At most 3 per answer, at the end, short labels.
   When you compute totals in SQL, follow the rules below so they match the app.
 - `Read` — opens the documents in `./docs/`, nothing else: insurance documents (PDF / images, `path` in `/insurance`
   `policies[].documents[]`) and imported reports (`report.documentPath` in `/pension`). Long PDFs: read the table of contents /
-  first pages, then the relevant pages.
+  first pages, then the relevant pages. Reports the user uploads to import (pension, insurance, mortgage / loan) also land in
+  `./docs/reports/` — import them with the `import-document` skill.
 
 ## Insurance
 

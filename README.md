@@ -213,11 +213,14 @@ The chat changes data when you ask it to ("set a ₪1,500 budget for restaurants
 cash expense"); when a change is its own suggestion it asks first, with a one-click button. Its answers link to the
 screen they talk about. It gives facts, not investment advice.
 
-## Importing pension and insurance reports
+## Importing pension, insurance and loan reports
 
-Pension / study / provident fund reports and insurance summaries (e.g. from your agent, the pension clearing house
-or הר הביטוח) come as PDFs. Extract them to JSON (by hand, or ask an AI assistant to), keep the files in the
-git-ignored `data/reports/` folder, and import:
+Pension / study / provident fund reports, insurance summaries (e.g. from your agent, the pension clearing house
+or הר הביטוח) and mortgage balance reports / loan amortization schedules come as PDFs. Press **ייבוא דוח** on the
+**פנסיה וגמל**, **ביטוחים** or **הלוואות ומשכנתא** screen and pick the PDF (or a photo): it is saved in the git-ignored
+`data/reports/` folder and the data chat reads it and puts its numbers in the app (this needs the Claude option in
+Settings, the only one that can open documents). A report already extracted to JSON can be picked there too and is
+imported directly. From the code, the same JSON imports run as:
 
 ```bash
 npm run import:pension   -- data/reports/2026-08-pension-report.json

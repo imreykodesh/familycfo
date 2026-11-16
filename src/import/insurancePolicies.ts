@@ -43,7 +43,7 @@ export function importInsurance(db: DB, spec: InsuranceImport, baseDir: string) 
   const root = resolve(baseDir, spec.documentsRoot ?? '.');
   const memberId = (name: string) => {
     const id = db.prepare(`SELECT id FROM members WHERE name = ?`).pluck().get(name) as number | undefined;
-    if (id == null) throw new Error(`member not found: ${name}`);
+    if (id == null) throw new Error(`אין בן בית בשם "${name}" (השם צריך להיות כמו בהגדרות ← בני הבית)`);
     return id;
   };
   let created = 0, updated = 0, documents = 0, snapshots = 0;
@@ -56,7 +56,7 @@ export function importInsurance(db: DB, spec: InsuranceImport, baseDir: string) 
       const m = entry.match ?? { insurer: String(entry.set.insurer), policyNumber: String(entry.set.policyNumber) };
       const found = db.prepare(`SELECT id FROM insurance_policies WHERE insurer = ? AND policy_number = ?${m.name ? ' AND name = ?' : ''}`)
         .all(...[m.insurer, m.policyNumber, ...(m.name ? [m.name] : [])]) as { id: number }[];
-      if (found.length > 1) throw new Error(`several policies match ${m.insurer} ${m.policyNumber} — add match.name`);
+      if (found.length > 1) throw new Error(`כמה פוליסות מתאימות ל-${m.insurer} ${m.policyNumber} — צריך להוסיף match.name`);
 
       let policyId: number;
       const keys = Object.keys(values);
@@ -68,7 +68,7 @@ export function importInsurance(db: DB, spec: InsuranceImport, baseDir: string) 
         }
         updated++;
       } else {
-        if (!values.name) throw new Error(`a new policy needs a name (${m.insurer} ${m.policyNumber})`);
+        if (!values.name) throw new Error(`לפוליסה חדשה צריך שם (${m.insurer} ${m.policyNumber})`);
         policyId = Number(db.prepare(`INSERT INTO insurance_policies (${keys.join(', ')}) VALUES (${keys.map(k => `@${k}`).join(', ')})`)
           .run(values).lastInsertRowid);
         created++;
@@ -78,7 +78,7 @@ export function importInsurance(db: DB, spec: InsuranceImport, baseDir: string) 
         const from = join(root, doc.file);
         const original = doc.name ?? basename(doc.file);
         const mime = MIME[extname(doc.file).toLowerCase()];
-        if (!mime) throw new Error(`unsupported document type: ${doc.file}`);
+        if (!mime) throw new Error(`סוג מסמך לא נתמך: ${doc.file}`);
         const size = statSync(from).size;
         if (db.prepare(`SELECT 1 FROM insurance_documents WHERE policy_id = ? AND original_name = ?`).get(policyId, original)) continue;
         const res = db.prepare(`INSERT INTO insurance_documents (policy_id, file_name, original_name, mime, size, kind) VALUES (?, '', ?, ?, ?, ?)`)
@@ -92,7 +92,7 @@ export function importInsurance(db: DB, spec: InsuranceImport, baseDir: string) 
 
     for (const s of spec.assetSnapshots ?? []) {
       const assetId = db.prepare(`SELECT id FROM assets WHERE provider = ? AND policy_number = ?`).pluck().get(s.provider, s.policyNumber) as number | undefined;
-      if (assetId == null) throw new Error(`asset not found: ${s.provider} ${s.policyNumber}`);
+      if (assetId == null) throw new Error(`לא נמצא נכס של ${s.provider} מספר ${s.policyNumber}`);
       if (db.prepare(`SELECT 1 FROM asset_snapshots WHERE asset_id = ? AND date = ?`).get(assetId, s.date)) continue;
       db.prepare(`INSERT INTO asset_snapshots (asset_id, date, value, currency) VALUES (?, ?, ?, 'ILS')`).run(assetId, s.date, s.value);
       snapshots++;
