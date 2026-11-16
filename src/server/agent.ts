@@ -8,7 +8,7 @@ import type { DB } from '../db/connection.js';
 import { cycleStartDay, getSetting, today } from '../analytics/common.js';
 import { POLICIES_DIR, REPORTS_DIR } from './routes/insurance.js';
 import { APP_DIR, IN_DESKTOP, dataPath } from '../paths.js';
-import { GEMINI_DEFAULT_MODEL, findKiro, geminiApiKey, geminiCommand, isModelId, kiroEnv, modelSettingKey } from './agentSetup.js';
+import { GEMINI_DEFAULT_MODEL, GEMINI_NO_CREDIT, isGeminiNoCredit, findKiro, geminiApiKey, geminiCommand, isModelId, kiroEnv, modelSettingKey } from './agentSetup.js';
 import { dataCoverage } from '../analytics/balances.js';
 
 /**
@@ -293,6 +293,7 @@ function startGemini(db: DB, message: string, sessionId: string | undefined): Ru
         emit({ type: 'done', sessionId: session,
           error: !raw ? null
             : /API key not valid|API_KEY_INVALID/i.test(raw) ? 'מפתח Gemini לא תקין. החליפו אותו בהגדרות ← עוזר AI'
+            : isGeminiNoCredit(raw) || isGeminiNoCredit(errors.join('\n')) ? GEMINI_NO_CREDIT
             : /exhausted your daily quota|quota|RESOURCE_EXHAUSTED|429/i.test(raw)
               ? 'נגמרה המכסה היומית החינמית של המפתח למודל הזה. בחרו מודל אחר בהגדרות ← עוזר AI ← מודל (למשל Flash), או נסו שוב מחר'
             : /not found|is not supported|NOT_FOUND|no longer available/i.test(raw) ? 'המודל שנבחר לא זמין למפתח הזה. בחרו מודל אחר בהגדרות ← עוזר AI ← מודל'

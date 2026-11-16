@@ -202,13 +202,29 @@ export function cleanGeminiKey(raw: string): string {
     .replace(/\s+/g, '');
 }
 
-/** Ask Google whether the key works (lists the models; no tokens used). */
+/** What the chat / the settings say when the key's Google project has no prepaid credit left (HTTP 402). */
+export const GEMINI_NO_CREDIT = 'המפתח תקין, אבל בפרויקט שלו ב-Google נגמר הקרדיט ששולם מראש, ולכן Google לא עונה. הוסיפו קרדיט ב-ai.studio/projects, או צרו מפתח בפרויקט אחר (בלי חיוב מראש) והחליפו אותו בהגדרות ← עוזר AI';
+export const isGeminiNoCredit = (text: string) => /prepayment credits|credits are depleted|"code":\s*402/i.test(text);
+
+/**
+ * Ask Google whether the key works: the model list (free), then a one-word question to the default model — the list
+ * answers even when the project can't pay for answers (prepaid credit used up).
+ */
 async function checkGeminiKey(key: string): Promise<'ok' | 'invalid' | 'offline' | string> {
   try {
     const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', {
       headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(15_000),
     });
-    if (res.ok) return 'ok';
+    if (res.ok) {
+      const ask = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_DEFAULT_MODEL}:generateContent`, {
+        method: 'POST', headers: { 'x-goog-api-key': key, 'content-type': 'application/json' }, signal: AbortSignal.timeout(20_000),
+        body: JSON.stringify({ contents: [{ parts: [{ text: 'hi' }] }], generationConfig: { maxOutputTokens: 1 } }),
+      }).catch(() => null);
+      if (ask && ask.status === 402) return GEMINI_NO_CREDIT;
+      if (ask && !ask.ok && isGeminiNoCredit(await ask.text())) return GEMINI_NO_CREDIT;
+      // other answers (a used-up daily quota, a busy model) don't make the key wrong: the chat explains them
+      return 'ok';
+    }
     const body = await res.text();
     if (/API_KEY_INVALID|API key not valid|API key expired/i.test(body) || res.status === 401) return 'invalid';
     if (/SERVICE_DISABLED|has not been used|is disabled/i.test(body)) {
