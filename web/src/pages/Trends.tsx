@@ -2,17 +2,21 @@ import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChartColumn, ChevronLeft, TrendingDown, TrendingUp } from 'lucide-react';
-import { api, qs, type CycleSummary } from '../api';
+import { api, qs, type CycleSummary, type DataCoverage } from '../api';
 import { useFilters, useLookups } from '../state';
 import { monthName, todayIso } from '../format';
 import { Empty, ErrorBox, Loading, Money, PageHeader, SectionTitle, Segmented } from '../components/ui';
 import { StackedColumns } from '../components/charts';
+import { companyName } from '../components/ScrapeButton';
 import { categoryIcon, CHART_COLORS } from '@/lib/visuals';
 
 const shortMonth = (key: string) => new Intl.DateTimeFormat('he-IL', { month: 'short', year: '2-digit' }).format(new Date(`${key}-01T12:00:00`));
 /** at most this many coloured series; the rest are summed into "אחר" */
 const MAX_SERIES = 8;
 const DIRECT = 'direct';
+/** the period picker's "max": from the month every bank / card company has data for */
+const MAX = 0;
+const dayMonthYear = (iso: string) => new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric' }).format(new Date(`${iso}T12:00:00`));
 
 interface Series { key: string; name: string; categoryId: number | null; hasChildren: boolean; values: number[]; total: number }
 
@@ -36,8 +40,9 @@ export default function Trends() {
     setUrl(next);
   };
 
-  const query = { ...params, cycles };
+  const query = { ...params, cycles: cycles === MAX ? 'max' : cycles };
   const history = useQuery({ queryKey: ['cashflow', query], queryFn: () => api.get<CycleSummary[]>(`/cashflow${qs(query)}`) });
+  const coverage = useQuery({ queryKey: ['coverage'], queryFn: () => api.get<DataCoverage>('/coverage'), enabled: cycles === MAX });
   const { isLoading, error } = history;
   // drop the empty months before the data starts (before the first scrape)
   const data = useMemo(() => {
@@ -125,8 +130,17 @@ export default function Trends() {
       <PageHeader title="מגמות הוצאות" icon={ChartColumn}
         subtitle="כמה הוצא בכל קטגוריה בכל חודש. לחיצה על קטגוריה פותחת את תתי-הקטגוריות שלה."
         actions={<Segmented value={cycles} onChange={setCycles} options={[
-          { value: 6, label: '6 חודשים' }, { value: 12, label: 'שנה' }, { value: 24, label: 'שנתיים' },
+          { value: 6, label: '6 חודשים' }, { value: 12, label: 'שנה' }, { value: 24, label: 'שנתיים' }, { value: MAX, label: 'מקסימום' },
         ]} />} />
+
+      {cycles === MAX && coverage.data?.start && (
+        <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
+          מקסימום: מ{monthName(coverage.data.start.slice(0, 7))}, החודש שממנו יש נתונים מכל הבנקים והכרטיסים.
+          {coverage.data.companies.length > 1 && coverage.data.limitedBy && <> ההיסטוריה של {companyName(coverage.data.limitedBy)} מתחילה הכי מאוחר ({dayMonthYear(coverage.data.start)}).</>}
+          {' '}
+          {coverage.data.companies.map(c => `${companyName(c.company)}: מ-${dayMonthYear(c.earliest)}`).join(' · ')}
+        </p>
+      )}
 
       <nav aria-label="רמת פירוט" className="mb-4 flex flex-wrap items-center gap-1 text-sm">
         <button className={`rounded-md px-2 py-1 ${parentId == null && leafKey == null ? 'font-semibold' : 'text-brand-600 hover:underline'}`} onClick={() => go(null)}>כל הקטגוריות</button>

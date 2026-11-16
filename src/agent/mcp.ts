@@ -1,9 +1,12 @@
 /**
- * MCP server (stdio) that gives the chat agent read-only access to the household data — and nothing
- * else. Launched by `claude -p` from src/server/agent.ts; the agent has no other tools (no files, no shell).
+ * MCP server (stdio) that gives the chat agent access to the household data — and nothing else.
+ * Launched by `claude -p` from src/server/agent.ts; the agent has no other tools (no files, no shell).
  *
- *   api: GET an endpoint of the household API — the same numbers the screens show
- *   sql: a read-only SELECT on bank.db (opened read-only + query_only)
+ *   api:    GET an endpoint of the household API — the same numbers the screens show
+ *   sql:    a read-only SELECT on bank.db (opened read-only + query_only)
+ *   change: POST / PUT / PATCH / DELETE a whitelisted endpoint of the API — the same calls the screens make,
+ *           so every change goes through the app's own rules (manual edits marked as manual, aliases, re-matching).
+ *           Never the scrape, the bank OTP, the chat itself or document uploads.
  */
 import Database from 'better-sqlite3';
 import { createInterface } from 'readline';
@@ -17,7 +20,21 @@ const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
 db.pragma('query_only = ON');
 
 // GET endpoints the agent may read (all are read-only)
-const API_PATHS = /^\/(summary|income|cashflow|forecast|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|planned|categories|meta|events(\/\d+)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|liabilities|scheduled|sync-status|insurance|pension|investments)$/;
+const API_PATHS = /^\/(summary|income|cashflow|forecast|coverage|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|transactions\/\d+\/similar|planned|rules|links|categories|meta|events(\/\d+(\/candidates)?)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled|sync-status|insurance|pension|investments)$/;
+
+// endpoints the agent may change (the method is checked by the API's own routes)
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const WRITE_PATHS = new RegExp('^/(' + [
+  'budgets', 'settings', 'fx', 'pipeline', 'recommendations/state', 'alerts/\\d+',
+  'categories(/\\d+)?',
+  'transactions/(\\d+|bulk|manual|\\d+/manual)', 'rules(/\\d+)?', 'links(/\\d+)?',
+  'planned(/\\d+(/match)?)?',
+  'events/\\d+/transactions',
+  'insurance(/\\d+)?', 'insurance/documents/\\d+',
+  'investments/refresh', 'investments/holdings(/\\d+)?',
+  '(members|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled)(/\\d+)?',
+  'accounts/[\\w:.@-]+',
+].join('|') + ')$');
 
 const TOOLS = [
   {
@@ -45,6 +62,25 @@ Common filters on most: member=ID, business=ID, tags=ID,ID.`,
       required: ['query'],
     },
   },
+  {
+    name: 'change',
+    description: `Change household data through the app's API — the same calls its screens make. Returns the API's JSON answer.
+Use only for a change the user asked for or confirmed (see CLAUDE.md "Changing data" for the endpoints and their bodies).
+Examples: PUT /budgets {"categoryId":12,"monthlyAmount":1500}; PATCH /transactions/123 {"categoryId":7};
+POST /transactions/bulk {"ids":[1,2],"patch":{"categoryId":7}}; POST /rules {"fromTransactionId":123,"setCategoryId":7};
+POST /transactions/manual {"date":"2026-11-02","description":"מזומן — שוק","amount":120,"categoryId":7};
+POST /planned {"description":"מקרר","amount":4500,"date":"2026-12-01","accountId":"max:1234","installments":3};
+POST /categories {"name":"חוגים","parentId":3}.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        method: { type: 'string', enum: [...WRITE_METHODS] },
+        path: { type: 'string', description: 'e.g. /budgets or /transactions/123' },
+        body: { type: 'object', description: 'JSON body (omit for DELETE)' },
+      },
+      required: ['method', 'path'],
+    },
+  },
 ];
 
 const clip = (s: string) => (s.length > MAX_CHARS ? `${s.slice(0, MAX_CHARS)}\n…[truncated — narrow the request]` : s);
@@ -56,6 +92,22 @@ async function callApi(path: string): Promise<string> {
   const body = await res.text();
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${body.slice(0, 500)}`);
   return clip(body);
+}
+
+async function callChange(method: string, path: string, body: unknown): Promise<string> {
+  const m = method.trim().toUpperCase();
+  if (!WRITE_METHODS.has(m)) throw new Error(`method not allowed: ${method}`);
+  const [pathname, search = ''] = path.trim().replace(/^\/api/, '').split('?');
+  if (!WRITE_PATHS.test(pathname)) throw new Error(`path not allowed for changes: ${pathname}`);
+  const hasBody = m !== 'DELETE' || (body != null && typeof body === 'object' && Object.keys(body).length > 0);
+  const res = await fetch(`${API}/api${pathname}${search ? `?${search}` : ''}`, {
+    method: m,
+    headers: hasBody ? { 'content-type': 'application/json' } : undefined,
+    body: hasBody ? JSON.stringify(body ?? {}) : undefined,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 500)}`);
+  return clip(text || '{"ok":true}');
 }
 
 function runSql(query: string): string {
@@ -94,6 +146,7 @@ async function handle(msg: Msg): Promise<void> {
       try {
         const text = name === 'api' ? await callApi(String(args.path ?? ''))
           : name === 'sql' ? runSql(String(args.query ?? ''))
+          : name === 'change' ? await callChange(String(args.method ?? ''), String(args.path ?? ''), args.body)
           : (() => { throw new Error(`unknown tool ${name}`); })();
         return send({ id: msg.id, result: { content: [{ type: 'text', text }] } });
       } catch (err) {

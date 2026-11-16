@@ -9,8 +9,9 @@ import { POLICIES_DIR, REPORTS_DIR } from './routes/insurance.js';
 
 /**
  * The data chat: each message runs the user's own Claude Code (`claude -p`, their subscription) with
- * no built-in tools — only the read-only `household` MCP server (src/agent/mcp.ts) — and streams the
- * answer back as server-sent events. A conversation continues with `--resume <sessionId>`.
+ * no built-in tools — only the `household` MCP server (src/agent/mcp.ts: read the data, and change it
+ * through whitelisted API endpoints) — and streams the answer back as server-sent events. A conversation
+ * continues with `--resume <sessionId>`.
  */
 
 const ROOT = resolve('.');
@@ -29,8 +30,9 @@ function systemPrompt(db: DB): string {
   const members = (db.prepare(`SELECT id, name FROM members ORDER BY id`).all() as { id: number; name: string }[])
     .map(m => `${m.id}=${m.name}`).join(', ');
   return `You are the household data assistant of "הכספים של הבית". Follow the instructions in CLAUDE.md and use a skill when the question fits one.
-Your only tools are the read-only household tools (api, sql), Skill, and Read for the documents in ./docs/: insurance policies
-(./docs/policies, paths from api /insurance) and imported pension / insurance reports (./docs/reports, the file from api /pension).
+Your only tools are the household tools (api and sql to read, change to update data the user asked to change), Skill,
+and Read for the documents in ./docs/: insurance policies (./docs/policies, paths from api /insurance) and imported
+pension / insurance reports (./docs/reports, the file from api /pension).
 
 Today is ${today()}. A month ("cycle", key YYYY-MM) starts on day ${cycleStartDay(db)} of the month. Members: ${members}.
 
@@ -101,7 +103,7 @@ export function agentRoutes(app: FastifyInstance, db: DB): void {
       // only the work dir's own settings (the Read guard) and skills, not the user's global ones
       '--setting-sources', 'project',
       '--strict-mcp-config', '--mcp-config', JSON.stringify(mcpConfig),
-      '--allowedTools', 'mcp__household__api,mcp__household__sql,Skill,Read(./docs/**)',
+      '--allowedTools', 'mcp__household__api,mcp__household__sql,mcp__household__change,Skill,Read(./docs/**)',
       '--system-prompt', systemPrompt(db),
       ...(sessionId ? ['--resume', sessionId] : []),
     ];
