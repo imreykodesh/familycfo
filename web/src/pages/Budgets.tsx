@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, qs, type BudgetStatus, type MonthIncome, type Tx } from '../api';
 import { useFilters, useLookups } from '../state';
-import { day, monthName, todayIso } from '../format';
+import { currentCycleKey, day, monthName } from '../format';
 import { Banknote, ChevronDown, PieChart, Target, TrendingUp } from 'lucide-react';
 import { ErrorBox, Loading, Money, PageHeader, Progress, SectionTitle } from '../components/ui';
 import { BarList, Gauge } from '../components/charts';
@@ -15,9 +15,11 @@ const STATUS_COLOR: Record<BudgetStatus['status'], string> = {
 
 export default function Budgets() {
   const { filters } = useFilters();
-  const { member } = useLookups();
+  const { member, meta } = useLookups();
   const qc = useQueryClient();
-  const [cycle, setCycle] = useState(todayIso().slice(0, 7));
+  // the cycle today is in (with a start day of 16, the 10th is still last month's cycle) until the user moves
+  const [picked, setCycle] = useState<string | null>(null);
+  const cycle = picked ?? currentCycleKey(meta?.settings.cycle_start_day);
   // parents are collapsed by default; a category's transactions open inline on click
   const [expandedParents, setExpandedParents] = useState<Set<number>>(new Set());
   const [openCategory, setOpenCategory] = useState<number | null>(null);

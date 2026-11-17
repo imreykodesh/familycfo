@@ -37,3 +37,14 @@ export const ASSET_TYPE_LABELS: Record<string, string> = {
 };
 
 export const todayIso = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+
+/** Key (YYYY-MM) of the month-cycle today falls in: named by the month it starts in, like `cycleFor` on the server
+ *  (start day 16 → 10 Nov is in cycle "2026-10"). */
+export function currentCycleKey(startDay: number | string | undefined): string {
+  const iso = todayIso();
+  const start = Math.min(28, Math.max(1, Number(startDay) || 1));
+  if (Number(iso.slice(8, 10)) >= start) return iso.slice(0, 7);
+  const d = new Date(`${iso.slice(0, 7)}-01T12:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() - 1);
+  return d.toISOString().slice(0, 7);
+}

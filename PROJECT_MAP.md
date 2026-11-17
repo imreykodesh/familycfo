@@ -146,7 +146,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `api.ts` | `api.get/post/put/patch/delete`, `qs`, כל הטיפוסים |
 | `state.tsx` | מסנן גלובלי (בן בית / עסק / תגיות): `useFilters`, `useMeta`, `useLookups` |
 | `desktop.ts` | גישה ל-`window.familycfo`, `useDesktopNavigation` |
-| `format.ts` | `money`, `day`, `monthName`, `KIND_LABELS`, `todayIso` |
+| `format.ts` | `money`, `day`, `monthName`, `KIND_LABELS`, `todayIso`, `currentCycleKey` (החודש של היום לפי יום תחילת החודש) |
 | `components/ui.tsx` | רכיבים משותפים: `Money`, `Stat`, `Modal`, `Picker`, `Segmented`, `PageHeader`, בוררים |
 | `components/charts.tsx` | גרפים |
 | `components/AgentChat.tsx` | חלון הצ'אט: קישורים `/…`, תשובות מהירות `ask:…`, תגיות שינוי, רענון אחרי שינוי, `askAgent()` |
