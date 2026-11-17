@@ -50,7 +50,7 @@ describe('saveTransactions', () => {
       VALUES (?, 'max:1', '2026-09-01T21:00:00.000Z', 'ארומה', -18, 'ILS', -18)`).run(legacy);
 
     const txns = normalizeTransactions('max:1', [scraped({ identifier: 'REF9' })]);
-    expect(saveTransactions(db, txns)).toEqual({ insertedIds: [], updated: 1 });
+    expect(saveTransactions(db, txns)).toEqual({ insertedIds: [], updated: 1, removed: 0 });
     const row = db.prepare(`SELECT bank_identifier, processed_date FROM transactions`).get() as Record<string, string>;
     expect(row.bank_identifier).toBe('REF9');
     expect(row.processed_date).toBe('2026-10-02T21:00:00.000Z');
@@ -66,6 +66,34 @@ describe('saveTransactions', () => {
     const res = saveTransactions(db, normalizeTransactions('max:1', [scraped({ identifier: 'R1' })]));
     expect(res.updated).toBe(1);
     expect(db.prepare(`SELECT status, charged_amount FROM transactions`).get()).toEqual({ status: 'completed', charged_amount: -18 });
+  });
+
+  it('gives a Max pending row its purchase amount and merges it into the completed row of the same Israel day', () => {
+    const db = testDb();
+    addAccount(db, 'max:1', 'card');
+    // Max: a pending row has no charged amount (NaN) and carries the purchase time; the completed one is at local midnight
+    const pending = scraped({ status: 'pending' as ScrapedTransaction['status'], chargedAmount: NaN, date: '2026-11-13T11:14:17.000Z', originalAmount: -155.6 });
+    saveTransactions(db, normalizeTransactions('max:1', [pending]));
+    expect(db.prepare(`SELECT charged_amount FROM transactions`).pluck().get()).toBe(-155.6);
+    const res = saveTransactions(db, normalizeTransactions('max:1', [
+      scraped({ identifier: 'R7', date: '2026-11-12T22:00:00.000Z', originalAmount: -155.6, chargedAmount: -155.6 })]));
+    expect(res).toMatchObject({ insertedIds: [], updated: 1, removed: 0 });
+    expect(db.prepare(`SELECT status, charged_amount FROM transactions`).all()).toEqual([{ status: 'completed', charged_amount: -155.6 }]);
+  });
+
+  it('keeps a foreign-currency pending row at 0 rather than counting dollars as shekels', () => {
+    const [t] = normalizeTransactions('max:1', [scraped({ status: 'pending' as ScrapedTransaction['status'], chargedAmount: NaN, originalAmount: -20, originalCurrency: 'USD' })]);
+    expect(t.chargedAmount).toBe(0);
+  });
+
+  it('removes a pending row the company stopped reporting', () => {
+    const db = testDb();
+    addAccount(db, 'max:1', 'card');
+    const hold = scraped({ status: 'pending' as ScrapedTransaction['status'], chargedAmount: NaN, description: 'מלון', originalAmount: -500, date: '2026-09-02T10:00:00.000Z' });
+    saveTransactions(db, normalizeTransactions('max:1', [scraped(), hold]));
+    const res = saveTransactions(db, normalizeTransactions('max:1', [scraped()]));
+    expect(res.removed).toBe(1);
+    expect(db.prepare(`SELECT description FROM transactions`).pluck().all()).toEqual(['ארומה']);
   });
 });
 

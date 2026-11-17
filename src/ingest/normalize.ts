@@ -42,6 +42,18 @@ export function legacyIdentifier(accountId: string, date: string, description: s
 }
 
 /**
+ * The amount charged. A pending authorization has no charged amount yet: Max sends none (the scraper turns it into
+ * NaN, stored as 0). Until it's charged, the purchase amount is the best figure — when it's in the same currency.
+ */
+function chargedAmountOf(txn: ScrapedTransaction, originalCurrency: string, chargedCurrency: string): number {
+  const charged = txn.chargedAmount;
+  if (charged == null) return txn.originalAmount;
+  const missing = !Number.isFinite(charged) || (String(txn.status) === 'pending' && charged === 0);
+  if (!missing) return charged;
+  return originalCurrency === chargedCurrency && Number.isFinite(txn.originalAmount) ? txn.originalAmount : 0;
+}
+
+/**
  * Normalize one account's scraped transactions and assign stable identities.
  *
  * - With a bank reference (asmachta) the identity is built from it, plus the installment
@@ -54,7 +66,8 @@ export function normalizeTransactions(accountId: string, txns: ScrapedTransactio
 
   return txns.map(txn => {
     const originalCurrency = txn.originalCurrency || 'ILS';
-    const chargedAmount = txn.chargedAmount ?? txn.originalAmount;
+    const chargedCurrency = txn.chargedCurrency || 'ILS';
+    const chargedAmount = chargedAmountOf(txn, originalCurrency, chargedCurrency);
     const bankIdentifier = txn.identifier != null && String(txn.identifier).trim() !== ''
       ? String(txn.identifier).trim() : null;
     const legacy = legacyIdentifier(accountId, txn.date, txn.description, txn.originalAmount, originalCurrency);
@@ -76,7 +89,7 @@ export function normalizeTransactions(accountId: string, txns: ScrapedTransactio
       originalAmount: txn.originalAmount,
       originalCurrency,
       chargedAmount,
-      chargedCurrency: txn.chargedCurrency || 'ILS',
+      chargedCurrency,
       status: txn.status || null,
       txnType: txn.type || null,
       installmentNumber: txn.installments?.number ?? null,

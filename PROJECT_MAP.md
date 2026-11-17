@@ -70,12 +70,12 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrapeErrors.ts` | הסבר בעברית לכשל משיכה (`explainScrapeError`) |
 | `demo.ts` | בניית `demo.db` |
 | `db/connection.ts` | `openDb`, `getDb` (פותח ומריץ מיגרציות) |
-| `db/migrations.ts` | מיגרציות ממוספרות (אחרונה: 22). לא לערוך מיגרציה ששוחררה — רק להוסיף בסוף |
+| `db/migrations.ts` | מיגרציות ממוספרות (אחרונה: 23). לא לערוך מיגרציה ששוחררה — רק להוסיף בסוף |
 | `db/migrate.ts` | `runMigrations` |
-| `db/ingestRepo.ts` | שמירת חשבונות ותנועות שנמשכו (`saveScrapedAccount`, `recordScrapeRun`); לא דורס שדות שנערכו ידנית |
+| `db/ingestRepo.ts` | שמירת חשבונות ותנועות שנמשכו (`saveScrapedAccount`, `recordScrapeRun`); לא דורס שדות שנערכו ידנית; תנועה ממתינה מתחלפת בתנועה שנקלטה מאותו יום בישראל, וממתינה שחברת האשראי כבר לא מחזירה נמחקת |
 | `db/backup.ts` | גיבוי יומי של המסד (`dailyBackup`), תאריך הגיבוי האחרון (`latestBackup`) |
 | `db/importData.ts` | ייבוא משק בית קיים לדסקטופ (`importHousehold`) |
-| `ingest/normalize.ts` | זהות תנועה ומניעת כפילויות, `localDate` |
+| `ingest/normalize.ts` | זהות תנועה ומניעת כפילויות, `localDate`; לתנועה ממתינה בלי סכום חיוב (מקס) נותנים את סכום הקנייה, רק בשקלים |
 | `ingest/classify.ts` | כללים → מטמון → קטגוריית חברת האשראי → API; `deriveKinds` |
 | `ingest/transfers.ts` | התאמת חיובי כרטיס והעברות בין חשבונות |
 | `import/pensionReport.ts`, `import/insurancePolicies.ts` | ייבוא דוחות JSON (`importPensionReport`, `importInsurance`) — משורת הפקודה או מה-API |
@@ -226,7 +226,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 `insurance_policies`, `insurance_documents`, `holdings`, `quotes`, `quote_history`, `alerts` (`href`: המסך שמטפל בהתראה; ההתראה בדסקטופ פותחת אותו), `recommendation_states`,
 `month_closes` (חודש שנסגר: צילום מצב + חתימה), `month_close_checks` (התשובות לבדיקות), `charge_moves` (חיוב קבוע שמועבר או מבוטל: todo / moved / verified / failed), `iou`, `iou_payments` (הלוואות בין אנשים והחזרים), `reminders`, `scrape_runs`, `settings`, `schema_version`.
 
-שינוי סכמה = מיגרציה חדשה בסוף `src/db/migrations.ts` (הבאה: 23) + עדכון הרשימה הזו.
+שינוי סכמה = מיגרציה חדשה בסוף `src/db/migrations.ts` (הבאה: 24) + עדכון הרשימה הזו.
 
 ### מפתחות `settings`
 | מפתח | משמעות |

@@ -284,7 +284,7 @@ export async function scrapeAll(config: Config, db: DB = getDb(), hooks: ScrapeH
         const saved = saveScrapedAccount(db, account.companyId, acc);
         newIds.push(...saved.insertedIds);
         const label = acc.savingsAccount ? ' (savings deposit)' : '';
-        console.log(`  ${saved.accountId}${label}: balance ${acc.balance ?? '-'} ${acc.currency ?? 'ILS'}, ${saved.insertedIds.length} new, ${saved.updated} updated`);
+        console.log(`  ${saved.accountId}${label}: balance ${acc.balance ?? '-'} ${acc.currency ?? 'ILS'}, ${saved.insertedIds.length} new, ${saved.updated} updated${saved.removed ? `, ${saved.removed} stale pending removed` : ''}`);
       }
       recordScrapeRun(db, { company: account.companyId, startedAt, success: true, newTransactions: newIds.length, startDate: startDay });
       summaries.push({ company: account.companyId, success: true, newTransactionIds: newIds });

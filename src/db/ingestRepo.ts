@@ -1,10 +1,12 @@
 import type { DB } from './connection.js';
 import { BANK_COMPANIES, friendlyAccountName } from './migrations.js';
-import { dateKey, normalizeTransactions, type NormalizedTransaction, type ScrapedAccount } from '../ingest/normalize.js';
+import { dateKey, localDate, normalizeTransactions, type NormalizedTransaction, type ScrapedAccount } from '../ingest/normalize.js';
 
 export interface SaveResult {
   insertedIds: number[];
   updated: number;
+  /** pending rows the company no longer reports */
+  removed: number;
 }
 
 /**
@@ -52,13 +54,22 @@ export function saveTransactions(db: DB, txns: NormalizedTransaction[]): SaveRes
   const legacyMatch = db.prepare(
     `SELECT id FROM transactions WHERE identifier = ? AND bank_identifier IS NULL`
   ).pluck();
-  // A pending row that has since completed (completed rows get a reference and a charged amount)
-  const pendingMatch = db.prepare(`
-    SELECT id FROM transactions
-    WHERE account_id = ? AND substr(date, 1, 10) = ? AND description = ? AND original_amount = ?
+  // A pending row that has since completed (completed rows get a reference and a charged amount).
+  // Compared by the Israel calendar day: Max dates a pending row with its time (2026-11-13T11:14Z) and the
+  // completed one at local midnight (2026-11-12T22:00Z), so the ISO prefixes differ.
+  const pendingCandidates = db.prepare(`
+    SELECT id, date FROM transactions
+    WHERE account_id = ? AND description = ? AND original_amount = ?
       AND (status = 'pending' OR (status IS NULL AND charged_amount = 0)) AND identifier != ?
-    LIMIT 1
-  `).pluck();
+    ORDER BY id
+  `);
+  const pendingMatch = (t: NormalizedTransaction): number | undefined => {
+    const day = localDate(t.date);
+    const rows = pendingCandidates.all(t.accountId, t.description, t.originalAmount, t.identifier) as { id: number; date: string }[];
+    return rows.find(r => !claimed.has(r.id) && localDate(r.date) === day)?.id;
+  };
+  const pendingRows = db.prepare(`SELECT id, date FROM transactions WHERE account_id = ? AND status = 'pending'`);
+  const deleteRow = db.prepare(`DELETE FROM transactions WHERE id = ?`);
 
   // Same transaction, different reference: some banks (Hapoalim) renumber the reference between scrapes.
   // Candidates are matched one-to-one, so two identical coffees on the same day stay two rows.
@@ -90,6 +101,7 @@ export function saveTransactions(db: DB, txns: NormalizedTransaction[]): SaveRes
 
   const insertedIds: number[] = [];
   let updated = 0;
+  let removed = 0;
 
   const incoming = new Set(txns.map(t => t.identifier));
   const claimed = new Set<number>();
@@ -105,9 +117,7 @@ export function saveTransactions(db: DB, txns: NormalizedTransaction[]): SaveRes
         (byIdentifier.get(t.identifier) as number | undefined) ??
         // rows saved before the migration carry the legacy identifier and no bank reference
         (t.bankIdentifier ? legacyMatch.get(t.legacyIdentifier) as number | undefined : undefined) ??
-        (t.status !== 'pending' && t.chargedAmount !== 0
-          ? pendingMatch.get(t.accountId, dateKey(t.date), t.description, t.originalAmount, t.identifier) as number | undefined
-          : undefined) ??
+        (t.status !== 'pending' && t.chargedAmount !== 0 ? pendingMatch(t) : undefined) ??
         fuzzyMatch(t);
       if (existingId != null) claimed.add(existingId);
 
@@ -120,9 +130,18 @@ export function saveTransactions(db: DB, txns: NormalizedTransaction[]): SaveRes
         insertedIds.push(id);
       }
     }
+
+    // A pending authorization the company no longer reports (within the dates this scrape returned) was either
+    // charged with a different amount / description or cancelled — the completed row, if any, is already saved.
+    for (const accountId of new Set(txns.map(t => t.accountId))) {
+      const from = txns.filter(t => t.accountId === accountId).map(t => localDate(t.date)).sort()[0];
+      for (const r of pendingRows.all(accountId) as { id: number; date: string }[]) {
+        if (!claimed.has(r.id) && localDate(r.date) >= from) { deleteRow.run(r.id); removed++; }
+      }
+    }
   })();
 
-  return { insertedIds, updated };
+  return { insertedIds, updated, removed };
 }
 
 export function recordScrapeRun(db: DB, run: {

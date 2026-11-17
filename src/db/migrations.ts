@@ -777,6 +777,28 @@ export const migrations: Migration[] = [
       db.exec(`ALTER TABLE alerts ADD COLUMN href TEXT`);
     },
   },
+  {
+    version: 23,
+    name: 'pending card rows: the purchase amount instead of 0, and no twin of a completed row',
+    up(db) {
+      // Max sends no charged amount for a pending authorization, so these rows were saved at 0 — and because Max dates
+      // the pending row with its time and the completed one at local midnight, a completed row didn't replace it.
+      const day = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date(iso));
+      const pending = db.prepare(`SELECT id, account_id, date, description, original_amount FROM transactions
+        WHERE status = 'pending' ORDER BY id`).all() as { id: number; account_id: string; date: string; description: string; original_amount: number }[];
+      const twins = db.prepare(`SELECT id, date FROM transactions WHERE account_id = ? AND description = ? AND original_amount = ?
+        AND status = 'completed' AND charged_amount != 0 ORDER BY id`);
+      const used = new Set<number>();
+      const del = db.prepare(`DELETE FROM transactions WHERE id = ?`);
+      for (const p of pending) {
+        const twin = (twins.all(p.account_id, p.description, p.original_amount) as { id: number; date: string }[])
+          .find(c => !used.has(c.id) && day(c.date) === day(p.date));
+        if (twin) { used.add(twin.id); del.run(p.id); }
+      }
+      db.exec(`UPDATE transactions SET charged_amount = original_amount, updated_at = CURRENT_TIMESTAMP
+        WHERE status = 'pending' AND charged_amount = 0 AND COALESCE(original_currency, 'ILS') = COALESCE(charged_currency, 'ILS')`);
+    },
+  },
 ];
 
 type CategoryKind = 'expense' | 'income' | 'transfer' | 'card_payment' | 'savings';
