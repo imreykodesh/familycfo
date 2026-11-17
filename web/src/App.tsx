@@ -3,7 +3,7 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-route
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import {
-  ArrowLeftRight, ChartColumn, Bell, Briefcase, Calculator, CalendarCheck, HeartPulse, ClipboardCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
+  ArrowLeftRight, ChartColumn, Bell, Briefcase, Calculator, CalendarCheck, HeartPulse, Shuffle, ClipboardCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
   ChartCandlestick, ScrollText, Settings2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
 } from 'lucide-react';
 import { api, type Alert, type HealthReport } from './api';
@@ -29,6 +29,7 @@ import Seasonal from './pages/Seasonal';
 import MonthClose from './pages/MonthClose';
 import Simulator from './pages/Simulator';
 import Health from './pages/Health';
+import ChargeMoves from './pages/ChargeMoves';
 import { Picker, Segmented } from './components/ui';
 import { AgentChat } from './components/AgentChat';
 import { desktop, useDesktopNavigation } from './desktop';
@@ -50,6 +51,7 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/trends', label: 'מגמות הוצאות', icon: ChartColumn },
   { to: '/cashflow', label: 'תזרים ותחזית', icon: TrendingUp },
   { to: '/insights', label: 'תובנות והתראות', icon: Lightbulb },
+  { to: '/charge-moves', label: 'מעבר כרטיס וביטולים', icon: Shuffle },
   { to: '/events', label: 'אירועים ותגיות', icon: Tags },
   { to: '/businesses', label: 'עסקים', icon: Briefcase },
   { to: '/savings', label: 'חסכונות והון', icon: Wallet },
@@ -278,6 +280,7 @@ export default function App() {
               <Route path="/month-close" element={<MonthClose />} />
               <Route path="/simulator" element={<Simulator />} />
               <Route path="/health" element={<Health />} />
+              <Route path="/charge-moves" element={<ChargeMoves />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/insurance" element={<Insurance />} />
               <Route path="/pension" element={<Pension />} />

@@ -6,7 +6,7 @@
  */
 import { existsSync, rmSync } from 'fs';
 import { openDb, type DB } from './db/connection.js';
-import { addDays, today } from './analytics/common.js';
+import { addDays, merchantKey, today } from './analytics/common.js';
 import { runPipeline } from './pipeline.js';
 import { lastOccurrence } from './analytics/hebcal.js';
 import { ensureSeasonalPot } from './analytics/seasonal.js';
@@ -132,6 +132,11 @@ function seedDemo(db: DB): void {
     VALUES (?, ?, ?, ?, ?, ?, ?)`);
   for (const company of ['hapoalim', 'leumi', 'isracard', 'max']) run.run(company, `${addDays(now, -1)}T05:00:00Z`, `${addDays(now, -1)}T05:02:00Z`, 1, null, null, 12);
   for (const hour of ['05', '06']) run.run('max', `${now}T${hour}:00:00Z`, `${now}T${hour}:01:00Z`, 0, 'INVALID_PASSWORD', 'Invalid password', 0);
+
+  // moving card A's subscriptions to card B (/charge-moves): a list waiting to be ticked
+  const move = db.prepare(`INSERT INTO charge_moves (merchant_key, description, from_account_id, to_account_id, amount, day_of_month)
+    VALUES (?, ?, ?, ?, ?, 3)`);
+  for (const [name, , price] of [shops[8], shops[9], shops[10]]) move.run(merchantKey(name as string), name, CARD_A, CARD_B, price);
 
   // a CPI-linked car loan and a savings goal, so the simulator (/simulator) has something to compare
   const carLoan = Number(db.prepare(`INSERT INTO liabilities (name, type, lender, owner_member_id, original_principal, interest_rate, index_type,

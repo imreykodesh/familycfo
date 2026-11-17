@@ -353,3 +353,16 @@ export interface HealthItem {
   status: 'problem' | 'suggestion' | 'ok'; title: string; detail?: string; href?: string; hrefLabel?: string; actions?: HealthAction[]; ignored?: boolean;
 }
 export interface HealthReport { items: HealthItem[]; problems: number; suggestions: number }
+
+/** GET /charge-moves: recurring charges moved to another account or cancelled, and whether it worked (src/analytics/chargeMoves.ts) */
+export interface ChargeMove {
+  id: number; recurringSeriesId: number | null; merchantKey: string; description: string; fromAccountId: string; fromName: string;
+  toAccountId: string | null; toName: string | null; amount: number; dayOfMonth: number | null;
+  status: 'todo' | 'moved' | 'verified' | 'failed'; markedAt: string | null; verifiedAt: string | null;
+  evidence: { id: number; accountId: string; date: string; amount: number; description: string } | null; notes: string | null;
+}
+/** GET /charge-moves/candidates?from=: the account's active recurring charges */
+export interface MoveCandidate {
+  seriesId: number; merchantKey: string; description: string; kind: string; amount: number; dayOfMonth: number | null;
+  lastDate: string | null; categoryName: string | null; listed: boolean;
+}

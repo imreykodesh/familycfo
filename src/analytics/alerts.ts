@@ -5,6 +5,7 @@ import { buildForecast } from './forecast.js';
 import { unmatchedCardBills, upcomingCardCharges } from './cards.js';
 import { isOverdue, listPlanned } from './planned.js';
 import { seasonalPlan } from './seasonal.js';
+import { listChargeMoves, sameMerchant } from './chargeMoves.js';
 
 export interface AlertDraft {
   type: string;
@@ -91,9 +92,13 @@ export function generateAlerts(db: DB, asOf = today()): AlertDraft[] {
   // subscriptions: new ones and price increases
   const series = db.prepare(`SELECT * FROM recurring_series WHERE active = 1 AND kind = 'subscription'`).all() as
     { merchant_key: string; account_id: string; typical_amount: number; last_amount: number; last_date: string }[];
+  const moves = listChargeMoves(db);
+  // a charge the user moved here on purpose isn't a new subscription
+  const movedHere = (s: { merchant_key: string; account_id: string }) =>
+    moves.some(m => m.toAccountId === s.account_id && m.status !== 'todo' && sameMerchant(m.merchantKey, s.merchant_key));
   for (const s of series) {
     const rows = txs.filter(t => t.merchant === s.merchant_key && t.accountId === s.account_id).sort((a, b) => a.date.localeCompare(b.date));
-    if (rows[0] && rows[0].date >= addDays(asOf, -100)) {
+    if (rows[0] && rows[0].date >= addDays(asOf, -100) && !movedHere(s)) {
       drafts.push({ type: 'new_subscription', severity: 'info', dedupeKey: `newsub:${s.merchant_key}:${s.account_id}`,
         title: `מנוי חדש: ${rows[0].description}`, message: `${ils(s.typical_amount)} בחודש (${ils(s.typical_amount * 12)} בשנה).` });
     }
@@ -157,6 +162,18 @@ export function generateAlerts(db: DB, asOf = today()): AlertDraft[] {
     drafts.push({ type: 'seasonal_short', severity: 'warning', dedupeKey: `seasonal-short:${e.id}:${e.nextDate}`,
       title: `${e.name} בעוד ${e.daysUntil} ימים, והקופה לא מכסה אותו`,
       message: `צפוי ${ils(e.amount)}. בקופה ${ils(seasonal.pot.balance)}, כולל האירועים שלפניו.` });
+  }
+
+  // moved / cancelled charges that were charged again on the old account (src/analytics/chargeMoves.ts)
+  for (const m of moves.filter(m => m.status === 'failed' && m.evidence)) {
+    const e = m.evidence!;
+    drafts.push(m.toAccountId
+      ? { type: 'move_still_on_old', severity: 'warning', dedupeKey: `move-old:${m.id}:${e.id}`, txnIds: [e.id],
+          title: `${m.description} עדיין יורד מ${m.fromName}`,
+          message: `סימנתם שהעברתם אותו ל${m.toName}, אבל ב-${e.date} חויבו ${ils(e.amount)} בחשבון הישן. כדאי לבדוק מול בית העסק.` }
+      : { type: 'cancel_failed', severity: 'warning', dedupeKey: `cancel-failed:${m.id}:${e.id}`, txnIds: [e.id],
+          title: `${m.description} חויב שוב אחרי הביטול`,
+          message: `סימנתם שביטלתם אותו, אבל ב-${e.date} חויבו ${ils(e.amount)} ב${m.fromName}. כדאי לבדוק שהביטול נקלט, ולבקש החזר.` });
   }
 
   // latest scrape per company failed

@@ -1,27 +1,28 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, type Alert, type Recommendation } from '../api';
+import { api, type Alert, type ChargeMove, type Recommendation } from '../api';
 import { day, todayIso } from '../format';
 import {
-  Activity, Bell, CalendarDays, CloudOff, Copy, CreditCard, Lightbulb, type LucideIcon, PieChart, Receipt, Repeat, RotateCcw,
+  Activity, Ban, Bell, CalendarDays, CloudOff, Copy, CreditCard, Lightbulb, type LucideIcon, PieChart, Receipt, Repeat, RotateCcw, Shuffle,
   Sparkles, TrendingUp, TriangleAlert, X,
 } from 'lucide-react';
 import { Empty, ErrorBox, Loading, Money, PageHeader, SectionTitle, SeverityDot } from '../components/ui';
 import { BarList, DonutChart } from '../components/charts';
 import { categoryIcon } from '@/lib/visuals';
 
-interface RecurringRow { merchantKey: string; accountId: string; kind: string; typicalAmount: number; lastAmount: number; typicalDay: number; lastDate: string; categoryName: string | null }
+interface RecurringRow { id: number; merchantKey: string; accountId: string; kind: string; typicalAmount: number; lastAmount: number; typicalDay: number; lastDate: string; categoryName: string | null }
 
 const ALERT_TYPES: Record<string, string> = {
   budget: 'תקציב', duplicate: 'חיוב כפול', anomaly: 'חריגה', new_subscription: 'מנוי חדש', price_increase: 'עליית מחיר',
   low_balance: 'יתרה נמוכה', card_vs_balance: 'חיוב כרטיס', fee: 'עמלה', unmatched_card_bill: 'כרטיס לא נסרק',
-  scrape_failed: 'סריקה', big_day: 'יום חריג',
+  scrape_failed: 'סריקה', big_day: 'יום חריג', cancel_failed: 'ביטול שלא נקלט', move_still_on_old: 'מעבר כרטיס',
 };
 
 const ALERT_ICONS: Record<string, LucideIcon> = {
   budget: PieChart, duplicate: Copy, anomaly: Activity, new_subscription: Repeat, price_increase: TrendingUp,
   low_balance: TriangleAlert, card_vs_balance: CreditCard, fee: Receipt, unmatched_card_bill: CreditCard,
-  scrape_failed: CloudOff, big_day: CalendarDays,
+  scrape_failed: CloudOff, big_day: CalendarDays, cancel_failed: Ban, move_still_on_old: Shuffle,
 };
 const SEVERITY_TILE: Record<string, string> = { critical: 'var(--negative)', warning: 'var(--chart-3)' };
 
@@ -31,6 +32,13 @@ export default function Insights() {
   const recs = useQuery({ queryKey: ['recommendations'], queryFn: () => api.get<Recommendation[]>('/recommendations') });
   const alerts = useQuery({ queryKey: ['alerts', showAll ? 'all' : 'open'], queryFn: () => api.get<Alert[]>(`/alerts${showAll ? '?all=1' : ''}`) });
   const recurring = useQuery({ queryKey: ['recurring'], queryFn: () => api.get<RecurringRow[]>('/recurring') });
+  const moves = useQuery({ queryKey: ['charge-moves'], queryFn: () => api.get<ChargeMove[]>('/charge-moves') });
+  // "I cancelled it": the app then checks after every update that it really stopped (/charge-moves)
+  const cancelled = useMutation({
+    mutationFn: (s: RecurringRow) => api.post('/charge-moves', { fromAccountId: s.accountId, toAccountId: null, seriesIds: [s.id], marked: true }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['charge-moves'] }),
+  });
+  const cancelOf = (s: RecurringRow) => moves.data?.find(m => m.toAccountId == null && m.fromAccountId === s.accountId && m.merchantKey === s.merchantKey);
 
   const recState = useMutation({
     mutationFn: (b: { key: string; state: string; until?: string }) => api.post('/recommendations/state', b),
@@ -105,13 +113,19 @@ export default function Insights() {
               </div>
             )}
             <div className="scroll-x card-bleed"><table className="table">
-              <thead><tr><th>שירות</th><th>קטגוריה</th><th className="text-end">חודשי</th><th className="text-end">שנתי</th><th>חיוב אחרון</th></tr></thead>
+              <thead><tr><th>שירות</th><th>קטגוריה</th><th className="text-end">חודשי</th><th className="text-end">שנתי</th><th>חיוב אחרון</th><th /></tr></thead>
               <tbody>
                 {subs.map(s => (
                   <tr key={s.merchantKey + s.accountId}>
                     <td className="min-w-32 font-medium">{s.merchantKey}</td><td className="text-xs text-zinc-500">{s.categoryName}</td>
                     <td className="text-end"><Money value={s.typicalAmount} cents /></td><td className="text-end"><Money value={s.typicalAmount * 12} /></td>
                     <td className="whitespace-nowrap text-xs text-zinc-500">{day(s.lastDate)}{s.lastAmount > s.typicalAmount * 1.05 && <span className="ms-1 text-rose-600">↑ <Money value={s.lastAmount} /></span>}</td>
+                    <td className="whitespace-nowrap text-xs">{(() => {
+                      const c = cancelOf(s);
+                      if (!c) return <button className="btn-ghost text-xs" disabled={cancelled.isPending} title="נבדוק אחרי כל עדכון שהחיוב באמת נפסק" onClick={() => cancelled.mutate(s)}>ביטלתי</button>;
+                      const label = { todo: 'ברשימה לביטול', moved: 'בוטל, בבדיקה', verified: '✓ נפסק', failed: '⚠ חויב שוב' }[c.status];
+                      return <Link className={c.status === 'failed' ? 'text-negative hover:underline' : 'text-fg-subtle hover:underline'} to="/charge-moves">{label}</Link>;
+                    })()}</td>
                   </tr>
                 ))}
               </tbody>
