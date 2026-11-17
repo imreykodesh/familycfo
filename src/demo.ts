@@ -146,6 +146,9 @@ function seedDemo(db: DB): void {
     .run(addDays(now, -200)).lastInsertRowid);
   db.prepare(`INSERT INTO iou_payments (iou_id, date, amount) VALUES (?, ?, 5000)`).run(parents, addDays(now, -60));
 
+  // the transactions list shows the Hebrew date too (settings → כללי)
+  db.prepare(`INSERT INTO settings (key, value) VALUES ('date_display', 'both')`).run();
+
   // reminders (/reminders): a monthly one, and a car insurance renewing in 3 weeks (an automatic reminder)
   db.prepare(`INSERT INTO reminders (text, start_at, repeat, href) VALUES ('לשלם לוועד הבית', ?, 'monthly', '/fixed')`).run(`${addDays(now, 5)}T08:00`);
   db.prepare(`INSERT INTO reminders (text, start_at) VALUES ('לחדש את רישיון הרכב', ?)`).run(`${addDays(now, 40)}T09:00`);

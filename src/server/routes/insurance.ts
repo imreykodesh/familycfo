@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import type { DB } from '../../db/connection.js';
 import { addDays, today } from '../../analytics/common.js';
 import { pickColumns, snake, toApi } from '../crud.js';
+import { insuranceCharges as sharedCharges, monthlyPremium, policyMatches } from '../../analytics/insurance.js';
 import { dataPath } from '../../paths.js';
 
 /**
@@ -29,25 +30,8 @@ type Row = Record<string, any>;
 /** Keep the name readable (Hebrew too) but safe as a file name. */
 const safeName = (name: string) => name.replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}._-]+/gu, '_').slice(0, 80) || 'document';
 
-/** Insurance-looking charges of the last year: by category ("ביטוח…") or by a policy's pattern. */
-function insuranceCharges(db: DB): Row[] {
-  return db.prepare(`
-    SELECT t.id, t.description, t.date, t.account_id, -t.charged_amount AS amount, t.category_id
-    FROM transactions t LEFT JOIN categories c ON c.id = t.category_id LEFT JOIN categories p ON p.id = c.parent_id
-    WHERE t.excluded = 0 AND t.kind IN ('expense', 'refund') AND t.date >= ? AND t.date <= ?
-      AND (c.name LIKE '%ביטוח%' OR p.name LIKE '%ביטוח%' OR EXISTS (
-        SELECT 1 FROM insurance_policies ip WHERE ip.archived = 0 AND ip.match_pattern IS NOT NULL AND ip.match_pattern <> ''
-          AND instr(lower(t.description), lower(ip.match_pattern)) > 0))
-    ORDER BY t.date`).all(addDays(today(), -365), `${today()}T23:59:59`) as Row[];
-}
-
-/** A charge is the policy's when its text matches — and it's from the paying account, if one is set. */
-const matches = (policy: Row, charge: Row) =>
-  !!policy.match_pattern?.trim() && charge.description.toLowerCase().includes(String(policy.match_pattern).trim().toLowerCase())
-  && (!policy.payment_account_id || charge.account_id === policy.payment_account_id);
-
-/** Normalized monthly cost of a policy's premium. */
-const monthlyPremium = (p: Row) => (p.premium == null ? 0 : p.premium_frequency === 'yearly' ? p.premium / 12 : p.premium_frequency === 'one_time' ? 0 : p.premium);
+const insuranceCharges = (db: DB) => sharedCharges(db);
+const matches = policyMatches;
 
 function documentsOf(db: DB, policyId?: number): Row[] {
   const rows = (policyId == null

@@ -11,6 +11,8 @@ import { isOverdue, linkPlanned, listPlanned, matchPlanned, plannedCandidates, p
 interface TxQuery {
   from?: string; to?: string; cycle?: string; member?: string; business?: string; tags?: string;
   category?: string; account?: string; search?: string; kind?: string; review?: string; hideCardPayments?: string;
+  /** 1 = only fixed spend (standing orders, subscriptions…), 0 = only variable spend — the split of the cash-flow numbers */
+  fixed?: string;
   /** YYYY-MM-DD: only card rows charged in that statement (same card, same charge month) */
   charge?: string;
   limit?: string; offset?: string;
@@ -48,6 +50,7 @@ export function transactionRoutes(app: FastifyInstance, db: DB): void {
     if (q.charge) txs = txs.filter(t => t.processedDate.slice(0, 7) === q.charge!.slice(0, 7));
     if (q.kind) txs = txs.filter(t => q.kind!.split(',').includes(t.kind));
     if (q.review === '1') txs = txs.filter(needsReview);
+    if (q.fixed === '1' || q.fixed === '0') txs = txs.filter(t => (t.kind === 'expense' || t.kind === 'refund') && t.fixed === (q.fixed === '1'));
     txs.sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || b.id - a.id);
     const accounts = new Map((db.prepare(`SELECT id, display_name FROM accounts`).all() as { id: string; display_name: string | null }[])
       .map(a => [a.id, a.display_name ?? a.id]));

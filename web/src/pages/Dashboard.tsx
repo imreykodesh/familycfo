@@ -41,6 +41,8 @@ export default function Dashboard() {
     grouped.set(key, g);
   }
   const categories = [...grouped.values()].sort((a, b) => b.spend - a.spend);
+  // every total opens exactly the rows behind it (the global member / business filter carries over)
+  const txHref = (extra: string) => `/transactions?cycle=${cycle.cycle.key}${extra}`;
   const catHref = (c: { categoryId: number | null }) => `/transactions${c.categoryId != null ? `?category=${c.categoryId}&cycle=${cycle.cycle.key}` : `?review=1`}`;
 
   // trends: completed cycles (oldest → newest), the current one last
@@ -64,9 +66,10 @@ export default function Dashboard() {
         <Stat index={1} icon={GaugeIcon} label={`יתרה צפויה בסוף ${periodName}`} value={forecast.total.endOfCycle}
           tone={forecast.total.endOfCycle < forecast.buffer ? 'bad' : 'good'} spark={balanceSpark}
           hint={<>נקודה נמוכה: <Money value={forecast.total.lowest.amount} /> ב-{day(forecast.total.lowest.date)}</>} />
-        <Stat index={2} icon={Receipt} color="var(--chart-3)" label="הוצאות המחזור" value={cycle.spend} delta={spendDelta}
+        <Stat index={2} icon={Receipt} color="var(--chart-3)" label="הוצאות המחזור" delta={spendDelta}
+          value={<Link to={txHref('&kind=expense,refund')} className="hover:underline" title="התנועות שמרכיבות את הסכום"><Money value={cycle.spend} animated /></Link>}
           spark={hist.length > 1 ? hist.map(h => h.spend) : undefined}
-          hint={<Link to="/fixed" className="hover:underline">קבועות <Money value={cycle.fixed} /> · משתנות <Money value={cycle.dynamic} /> ←</Link>} />
+          hint={<><Link to={txHref('&fixed=1')} className="hover:underline">קבועות <Money value={cycle.fixed} /></Link> · <Link to={txHref('&fixed=0')} className="hover:underline">משתנות <Money value={cycle.dynamic} /></Link> · <Link to="/fixed" className="hover:underline">קבועות החודש ←</Link></>} />
         {capacity.monthlyCapacity >= 0 ? (
           <Stat index={3} icon={PiggyBank} label="עודף חודשי ממוצע (לחיסכון)" value={capacity.monthlyCapacity} tone="good"
             spark={hist.length > 1 ? hist.map(h => h.net) : undefined}

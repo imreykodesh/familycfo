@@ -98,6 +98,8 @@ function CheckRow({ c, onAnswer }: { c: MonthCheck; onAnswer: (a: string | null)
 }
 
 function Report({ r }: { r: MonthReport }) {
+  // each total opens the rows behind it
+  const tx = (extra: string) => `/transactions?cycle=${r.cycle.key}${extra}`;
   const vsAvg = r.average.months ? r.net - r.average.net : null;
   return (
     <div className="mt-4 space-y-4">
@@ -114,9 +116,10 @@ function Report({ r }: { r: MonthReport }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat index={0} icon={TrendingUp} tone="good" label="הכנסות" value={r.income} hint={r.average.months ? <>ממוצע <Money value={r.average.income} /></> : undefined} />
-        <Stat index={1} icon={TrendingDown} label="הוצאות" value={r.spend} hint={r.average.months ? <>ממוצע <Money value={r.average.spend} /></> : undefined} />
-        <Stat index={2} icon={CalendarCheck2} color="var(--chart-1)" label="מזה קבועות" value={r.fixed} hint={<>משתנות <Money value={r.dynamic} /></>} />
+        <Stat index={0} icon={TrendingUp} tone="good" label="הכנסות" value={<Link className="hover:underline" to={tx('&kind=income')}><Money value={r.income} animated /></Link>} hint={r.average.months ? <>ממוצע <Money value={r.average.income} /></> : undefined} />
+        <Stat index={1} icon={TrendingDown} label="הוצאות" value={<Link className="hover:underline" to={tx('&kind=expense,refund')}><Money value={r.spend} animated /></Link>} hint={r.average.months ? <>ממוצע <Money value={r.average.spend} /></> : undefined} />
+        <Stat index={2} icon={CalendarCheck2} color="var(--chart-1)" label="מזה קבועות" value={<Link className="hover:underline" to={tx('&fixed=1')}><Money value={r.fixed} animated /></Link>}
+          hint={<Link className="hover:underline" to={tx('&fixed=0')}>משתנות <Money value={r.dynamic} /></Link>} />
         <Stat index={3} icon={Landmark} color="var(--chart-5)" label="יתרת חובות" value={r.debts.total} hint={r.debts.monthly ? <>החזר חודשי <Money value={r.debts.monthly} /></> : 'אין הלוואות רשומות'} />
       </div>
 

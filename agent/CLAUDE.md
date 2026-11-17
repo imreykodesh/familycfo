@@ -29,7 +29,7 @@ Markdown links whose target starts with `/` open that screen of the app (the cha
 | Screen | Link |
 |---|---|
 | Overview | `/` |
-| Transactions of a month / category / account | `/transactions?cycle=YYYY-MM&category=ID&account=ID&search=TEXT&kind=expense` (any subset) |
+| Transactions of a month / category / account | `/transactions?cycle=YYYY-MM&category=ID&account=ID&search=TEXT&kind=expense` (any subset), `/transactions?cycle=YYYY-MM&fixed=1` (fixed spend) / `&fixed=0` (variable), `&kind=income` |
 | Uncategorized expenses to review | `/transactions?review=1&cycle=YYYY-MM` |
 | A card statement (rows charged in a month) | `/transactions?account=ID&charge=YYYY-MM` |
 | Fixed commitments of the month / scheduled items | `/fixed`, `/fixed#scheduled` |

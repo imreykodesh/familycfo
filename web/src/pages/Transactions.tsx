@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { api, qs, type HistoryRange, type Tx } from '../api';
 import { useFilters, useLookups } from '../state';
-import { day, KIND_LABELS, monthName, todayIso } from '../format';
+import { day, hebrewDay, KIND_LABELS, monthName, todayIso } from '../format';
 import {
   AccountSelect, AnimatedNumber, BusinessSelect, CategorySelect, Empty, ErrorBox, Field, Loading, MemberSelect, Modal, Money,
   NewTagInput, PageHeader, Picker, Stat, TagPicker, type PickerOption,
@@ -49,6 +49,8 @@ export default function Transactions() {
   const [review, setReview] = useState(urlParams.get('review') === '1');
   // a card statement (from clicking an upcoming card charge): that card's rows charged in that month
   const [charge, setCharge] = useState<string | null>(urlParams.get('charge'));
+  // fixed=1 / fixed=0: only the fixed / variable spend (a click on those numbers on the overview or the monthly report)
+  const [fixed, setFixed] = useState<string | null>(urlParams.get('fixed'));
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'date', dir: -1 });
   // keep the URL in sync so the filtered view can be bookmarked or opened again with Back
   useEffect(() => {
@@ -60,8 +62,9 @@ export default function Transactions() {
     if (kind) next.set('kind', kind);
     if (review) next.set('review', '1');
     if (charge) next.set('charge', charge);
+    if (fixed) next.set('fixed', fixed);
     setUrlParams(next, { replace: true });
-  }, [cycle, search, category, account, kind, review, charge, setUrlParams]);
+  }, [cycle, search, category, account, kind, review, charge, fixed, setUrlParams]);
   const [hideCardPayments, setHideCardPayments] = useState(true);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [editing, setEditing] = useState<Tx | null>(null);
@@ -70,7 +73,7 @@ export default function Transactions() {
   const [manual, setManual] = useState<Tx | 'new' | null>(null);
   const [suggestRule, setSuggestRule] = useState<{ tx: Tx; patch: Record<string, unknown>; count: number } | null>(null);
 
-  const query = { ...params, cycle: review ? undefined : cycle || undefined, search, category, account, kind, review: review ? 1 : undefined, charge: charge ?? undefined, hideCardPayments: hideCardPayments ? 1 : undefined, limit: 1000 };
+  const query = { ...params, cycle: review ? undefined : cycle || undefined, search, category, account, kind, review: review ? 1 : undefined, charge: charge ?? undefined, fixed: fixed ?? undefined, hideCardPayments: hideCardPayments ? 1 : undefined, limit: 1000 };
   const { data, isLoading, error } = useQuery({ queryKey: ['transactions', query], queryFn: () => api.get<TxPage>(`/transactions${qs(query)}`) });
 
   const invalidate = () => {
@@ -148,7 +151,8 @@ export default function Transactions() {
     { value: '', label: 'כל התקופות' },
     ...cycles.map(c => ({ value: c, label: monthName(c), icon: <CalendarDays /> })),
   ], [cycles]);
-  const kindFilterOptions = useMemo<PickerOption[]>(() => [{ value: '', label: 'כל הסוגים' }, ...kindOptions()], []);
+  const kindFilterOptions = useMemo<PickerOption[]>(() => [{ value: '', label: 'כל הסוגים' }, { value: 'expense,refund', label: 'הוצאות וזיכויים' }, ...kindOptions()], []);
+  const bothDates = meta?.settings.date_display === 'both';
   const tagOptions = useMemo<PickerOption[]>(() => [
     { value: '', label: '+ תגית' },
     ...(meta?.tags.filter(t => !t.archived).map(t => ({ value: String(t.id), label: `#${t.name}`, icon: <Hash /> })) ?? []),
@@ -206,6 +210,7 @@ export default function Transactions() {
         <Picker className="input max-sm:col-span-2" value={kind} onChange={v => setKind(v ?? '')} options={kindFilterOptions} placeholder="כל הסוגים" searchable={false} />
         <div className="col-span-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-fg-muted sm:col-span-1 sm:flex-col sm:items-start sm:justify-center sm:gap-1.5">
           <label className="flex min-h-8 items-center gap-2 max-sm:min-h-10"><input type="checkbox" checked={review} onChange={e => setReview(e.target.checked)} /> רק ללא קטגוריה</label>
+          {fixed && <button className="chip" onClick={() => setFixed(null)}>{fixed === '1' ? 'רק קבועות' : 'רק משתנות'} ✕</button>}
           <label className="flex min-h-8 items-center gap-2 max-sm:min-h-10" title="שורות ״ויזה״/״כאל״ בבנק שמשלמות עסקאות שכבר מופיעות בכרטיס">
             <input type="checkbox" checked={hideCardPayments} onChange={e => setHideCardPayments(e.target.checked)} /> הסתר תשלומי כרטיס
           </label>
@@ -254,6 +259,7 @@ export default function Transactions() {
                   <td><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggle(t.id)} /></td>
                   <td className="whitespace-nowrap text-zinc-500">
                     {day(t.date)}
+                    {bothDates && <div className="text-[11px]">{hebrewDay(t.date)}</div>}
                     {t.processedDate !== t.date && t.accountKind === 'card' && <div className="text-[11px]">חיוב {day(t.processedDate)}</div>}
                   </td>
                   <td>

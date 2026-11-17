@@ -79,7 +79,12 @@ export function buildApp(db: DB, opts: Pick<ServerOptions, 'webDist'> = {}): Fas
     const body = req.body as Record<string, string | number>;
     const allowed = ['cycle_start_day', 'balance_buffer', 'category_api_url', 'scrape_months_back', 'agent_provider', ...MODEL_SETTING_KEYS,
       // the desktop app: daily scrape and notifications
-      'scrape_time', 'scrape_catch_up', 'notify_scrape', 'notify_alerts', 'onboarding_done'];
+      'scrape_time', 'scrape_catch_up', 'notify_scrape', 'notify_alerts', 'onboarding_done',
+      // how dates show in the transactions list: gregorian | both (with the Hebrew date)
+      'date_display'];
+    if (body.date_display != null && !['gregorian', 'both'].includes(String(body.date_display))) {
+      return reply.code(400).send({ error: 'date_display must be gregorian or both' });
+    }
     if (body.scrape_time != null && !/^(([01]?\d|2[0-3]):[0-5]\d)?$/.test(String(body.scrape_time))) {
       return reply.code(400).send({ error: 'scrape_time must be HH:MM' });
     }
