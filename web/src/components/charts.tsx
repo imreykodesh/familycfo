@@ -427,3 +427,36 @@ export function StackedColumns({ data, series, height = 300, average, onPick }: 
     </div>
   );
 }
+
+/** Several values over the same x axis as lines (e.g. the debt left under each repayment method). */
+export function MultiLine({ data, series, xKey = 'label', height = 240 }: {
+  data: Record<string, number | string | null>[]; series: { key: string; name: string; color: string; dashed?: boolean }[];
+  xKey?: string; height?: number;
+}) {
+  return (
+    <div>
+      <Legend items={series.map(s => ({ label: s.name, color: s.color, line: true }))} />
+      <div dir="ltr" style={{ height }}>
+        <ResponsiveContainer>
+          <ComposedChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 4" vertical={false} />
+            <XAxis dataKey={xKey} tick={axis} axisLine={false} tickLine={false} minTickGap={28} />
+            <YAxis tick={axis} tickFormatter={compact} width={50} axisLine={false} tickLine={false} />
+            <Tooltip cursor={{ stroke: 'var(--chart-1)', strokeOpacity: 0.35, strokeDasharray: '3 3' }}
+              content={({ active, payload, label }) => active && payload?.length ? (
+                <TooltipCard title={String(label)}
+                  rows={series.map(s => {
+                    const v = payload.find(p => p.dataKey === s.key)?.value;
+                    return { label: s.name, value: v == null ? '—' : money(Number(v)), color: s.color };
+                  })} />
+              ) : null} />
+            {series.map(s => (
+              <Line key={s.key} dataKey={s.key} name={s.name} type="monotone" stroke={s.color} strokeWidth={2.25} dot={false}
+                strokeDasharray={s.dashed ? '5 4' : undefined} connectNulls={false} isAnimationActive={false} />
+            ))}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}

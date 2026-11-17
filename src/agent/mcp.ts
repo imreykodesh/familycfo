@@ -36,7 +36,7 @@ const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
 db.pragma('query_only = ON');
 
 // GET endpoints the agent may read (all are read-only)
-const API_PATHS = /^\/(summary|income|cashflow|forecast|coverage|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|transactions\/\d+\/similar|planned|rules|links|categories|meta|events(\/\d+(\/candidates)?)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled|sync-status|scrape\/runs|logs|insurance|pension|investments|balance-history|history-range|allowance|seasonal|month-close|month-report)$/;
+const API_PATHS = /^\/(summary|income|cashflow|forecast|coverage|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|transactions\/\d+\/similar|planned|rules|links|categories|meta|events(\/\d+(\/candidates)?)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled|sync-status|scrape\/runs|logs|insurance|pension|investments|balance-history|history-range|allowance|seasonal|month-close|month-report|simulator\/(base|debts))$/;
 
 // endpoints the agent may change (the method is checked by the API's own routes)
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -75,6 +75,9 @@ Hebrew calendar and other yearly events, next dates, the pot, how much to put as
 /month-close?cycle=YYYY-MM (closing a month: checks — accounts with rows to the end, duplicates, uncategorized, fixed items that didn't
 show up, waiting links / planned; closed or not), /month-report?cycle=YYYY-MM (the month vs the average, top categories, over budget,
 ended fixed items, debts, top recommendations). Default: the last month that ended.
+/simulator/base (average monthly spend per category over the complete months, savings goals, loans that can be simulated and why
+others can't), /simulator/debts?extra=₪&cpi=%&fee=% (repaying the loans: only the fixed repayments vs snowball — smallest balance first —
+vs avalanche — highest interest first — with extra ₪ a month more: months to repay, interest, CPI linkage, fees, saving, closing order).
 /sync-status (each bank's last scrape: result, failures in a row, explanation), /scrape/runs?company=&failed=1&limit=N (scrape history with
 the error, the bank page's text when it failed, and an explanation), /logs?level=error|warn&days=N&search=TEXT (the app's log lines).
 Common filters on most: member=ID, business=ID, tags=ID,ID.`,

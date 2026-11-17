@@ -36,6 +36,7 @@ Markdown links whose target starts with `/` open that screen of the app (the cha
 | Budgets | `/budgets` |
 | Expected-events fund (holidays, summer…) | `/seasonal` |
 | Month close and monthly report | `/month-close`, `/month-close?cycle=YYYY-MM` |
+| Simulator: cutting a category, snowball vs avalanche | `/simulator` |
 | Spend trends: all, one parent category, one sub-category | `/trends`, `/trends?parent=ID`, `/trends?parent=ID&leaf=ID` |
 | Cash flow and forecast | `/cashflow` |
 | Insights and alerts | `/insights` |

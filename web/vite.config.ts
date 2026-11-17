@@ -11,6 +11,9 @@ export default defineConfig({
     host: '127.0.0.1',
     port: Number(process.env.WEB_PORT ?? 5180),
     strictPort: true,
+    // the simulator's pure functions are shared with the API (src/analytics/simulator.ts) — allow only that file,
+    // never the repo root (it holds bank.db and accounts.json)
+    fs: { allow: ['.', '../src/analytics/simulator.ts'] },
     proxy: { '/api': `http://127.0.0.1:${process.env.PORT ?? 4310}` },
   },
 });

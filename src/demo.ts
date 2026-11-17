@@ -127,6 +127,12 @@ function seedDemo(db: DB): void {
     start_date, end_date, monthly_payment, payment_day, bank_account_id, match_pattern) VALUES ('משכנתא', 'mortgage', 'לאומי', 2, 1100000, 4.6, 'prime',
     '2021-06-01', '2046-06-01', 5200, 2, ?, 'משכנתא')`).run(BANK_B).lastInsertRowid);
   db.prepare(`INSERT INTO liability_snapshots (liability_id, date, balance) VALUES (?, ?, ?)`).run(mortgage, now, 905000);
+  // a CPI-linked car loan and a savings goal, so the simulator (/simulator) has something to compare
+  const carLoan = Number(db.prepare(`INSERT INTO liabilities (name, type, lender, owner_member_id, original_principal, interest_rate, index_type,
+    start_date, end_date, monthly_payment) VALUES ('הלוואת רכב', 'loan', 'מימון ישיר', 1, 80000, 3.5, 'cpi', '2024-03-01', '2029-03-01', 1450)`).run().lastInsertRowid);
+  db.prepare(`INSERT INTO liability_snapshots (liability_id, date, balance) VALUES (?, ?, ?)`).run(carLoan, now, 42000);
+  db.prepare(`INSERT INTO sinking_funds (name, monthly_target, balance, goal_amount, goal_date) VALUES ('רכב חדש', 1500, 18000, 60000, ?)`)
+    .run(addDays(now, 730));
 
   const holding = db.prepare(`INSERT INTO holdings (symbol, name, quantity, currency, buy_price, buy_date, broker, owner_member_id, manual_price, manual_price_date)
     VALUES (?, ?, ?, ?, ?, ?, 'IBKR', 1, ?, ?)`);
