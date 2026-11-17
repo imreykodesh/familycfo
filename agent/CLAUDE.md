@@ -36,6 +36,7 @@ Markdown links whose target starts with `/` open that screen of the app (the cha
 | Budgets | `/budgets` |
 | Expected-events fund (holidays, summer…) | `/seasonal` |
 | Maaser (tithe): required, given, left to give | `/maaser` |
+| Personal loans between people (who owes whom) | `/iou` |
 | Month close and monthly report | `/month-close`, `/month-close?cycle=YYYY-MM` |
 | Simulator: cutting a category, snowball vs avalanche | `/simulator` |
 | Health check (failed scrapes, stale balances, duplicates, missing months…) | `/health` |
@@ -77,6 +78,7 @@ At most 3 per answer, at the end, short labels.
 | Events / trips (tags) | `POST /tags` `{name, startDate?, endDate?, budget?, notes?}`, `PATCH /tags/ID`; tag rows `POST /events/ID/transactions` `{add: [txIds], remove: [txIds]}` |
 | Fixed items (standing orders, salary, loans) | `POST /scheduled` `{name, kind: "fixed_expense"/"income"/"loan"/"mortgage"/"card_charge", amount (signed: + income, − outflow), dayOfMonth, amountMode?: "fixed"/"estimated", bankAccountId?, categoryId?, memberId?, matchPattern?, status: "confirmed"}`; `PATCH /scheduled/ID` (`status: "dismissed"` to stop it) |
 | Expected-events fund | add an event `POST /seasonal` `{name, calendar: "hebrew"/"gregorian", month: "Tishri"…"Elul" (Hebrew; "Adar" = Adar II in a leap year) or "1"…"12", day, amount, notes?}`; `PATCH /seasonal/ID` (same fields + `active`), `DELETE /seasonal/ID`; after an event: `POST /seasonal/ID/settle` `{date: the pendingSettle date, spent}`; the pot's balance `PUT /seasonal/pot` `{balance}` |
+| Personal loans | add `POST /iou` `{direction: "owed_to_me"/"i_owe", person, amount, date?, dueDate?, matchPattern?, notes?}`; `PATCH /iou/ID` (same + `done: true` to close); repayment `POST /iou/ID/payments` `{txnId}` (a row from paymentCandidates) or `{date, amount}`; the loan's own row `PUT /iou/ID/source` `{txnId}`; not it `POST /iou/ID/reject` `{txnId}`; `DELETE /iou/ID` |
 | Maaser settings | `PUT /maaser/config` with any of `{enabled, percent, base: "net"/"gross", grossMonthly, donationCategoryIds (null = the default), excludeCategoryIds, excludePatterns: [texts], startMonth: "YYYY-MM", openingBalance (+ owed / − given ahead)}` |
 | Moving / cancelling recurring charges | list `POST /charge-moves` `{fromAccountId, toAccountId (null = cancel), seriesIds: [recurring series ids from GET /charge-moves/candidates?from=ACCOUNT], marked?: true (already done)}`; tick one done `PATCH /charge-moves/ID` `{status: "moved"}` (`"todo"` = not yet); `DELETE /charge-moves/ID` |
 | Health check | hide a row as it reads now `PUT /health/ignore` `{id (from GET /health), ignore: true}` (`false` shows it again); confirm / reject a payback link `PATCH /links/ID` `{status: "confirmed"/"rejected"}` |

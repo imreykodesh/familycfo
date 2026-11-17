@@ -70,7 +70,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrapeErrors.ts` | הסבר בעברית לכשל משיכה (`explainScrapeError`) |
 | `demo.ts` | בניית `demo.db` |
 | `db/connection.ts` | `openDb`, `getDb` (פותח ומריץ מיגרציות) |
-| `db/migrations.ts` | מיגרציות ממוספרות (אחרונה: 20). לא לערוך מיגרציה ששוחררה — רק להוסיף בסוף |
+| `db/migrations.ts` | מיגרציות ממוספרות (אחרונה: 21). לא לערוך מיגרציה ששוחררה — רק להוסיף בסוף |
 | `db/migrate.ts` | `runMigrations` |
 | `db/ingestRepo.ts` | שמירת חשבונות ותנועות שנמשכו (`saveScrapedAccount`, `recordScrapeRun`); לא דורס שדות שנערכו ידנית |
 | `db/backup.ts` | גיבוי יומי של המסד (`dailyBackup`), תאריך הגיבוי האחרון (`latestBackup`) |
@@ -97,6 +97,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `allowance.ts` | כמה אפשר להוציא ביום: `computeAllowance` (טהורה), `buildAllowance`, `committedCardAmount` |
 | `hebcal.ts` | לוח עברי בלי ספרייה (Intl): `hebrewParts`, `occurrences`, `nextOccurrence`, `lastOccurrence`, `HEBREW_MONTHS` |
 | `monthClose.ts` | סגירת חודש ודוח: `monthChecks`, `monthCloseState`, `answerCheck` ("הסתיים" מסיים את הפריט הקבוע), `closeMonth` / `reopenMonth`, `monthSignature`, `closeHistory`, `monthReport` |
+| `iou.ts` | הלוואות בין אנשים: `listIous` (עם הצעות להחזר ולתנועת ההלוואה), `iouCandidates` (טהורה), `createIou`, `addIouPayment` / `removeIouPayment`, `setSource`, `rejectIouCandidate`, `deleteIou` |
 | `maaser.ts` | מעשרות: `maaserReport` (חודש אחרי חודש: הכנסה, נדרש, ניתן, יתרה מצטברת), `maaserMonth` (טהורה), `maaserConfig` / `parseMaaserConfig` / `saveMaaserConfig`, `donationCategories` |
 | `chargeMoves.ts` | מעבר כרטיס וביטול חיובים: `moveCandidates`, `addChargeMoves`, `markChargeMove`, `listChargeMoves`, `verifyChargeMoves` (ב-pipeline אחרי הקבועות), `sameMerchant` |
 | `health.ts` | בדיקת תקינות: `healthReport` (משיכות, גיבוי, יתרות ישנות, כרטיס בלי חשבון חיוב, כפילויות, בלי קטגוריה, חודשים חסרים, קישורי החזר והוצאות מתוכננות שממתינים, הצעות לכללי סיווג), `setIgnored`, `wordingOf` |
@@ -123,7 +124,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrapeJob.ts` | משיכה מהממשק: `startScrape({ from, showBrowser, checkOnly, loginIds })`, `submitOtp` |
 | `scheduler.ts` | משיכה יומית בשעה קבועה (`scrape_time`) |
 | `appEvents.ts` | אירועים לאפליקציית הדסקטופ (`emitAppEvent`) |
-| `routes/*.ts` | transactions, analytics, categories, events, insurance, pension, investments, reports (העלאת דוח וייבוא JSON), seasonal (קופה לאירועים + `allowance`), monthClose (סגירת חודש ודוח), simulator (קלט לסימולטור והשוואת החזר חובות), health (בדיקת תקינות), chargeMoves (מעבר כרטיס וביטולים), maaser (מעשרות) |
+| `routes/*.ts` | transactions, analytics, categories, events, insurance, pension, investments, reports (העלאת דוח וייבוא JSON), seasonal (קופה לאירועים + `allowance`), monthClose (סגירת חודש ודוח), simulator (קלט לסימולטור והשוואת החזר חובות), health (בדיקת תקינות), chargeMoves (מעבר כרטיס וביטולים), maaser (מעשרות), iou (הלוואות בין אנשים) |
 
 ### `desktop/` — Electron
 | קובץ | תפקיד |
@@ -167,6 +168,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `/budgets` | תקציב | |
 | `/seasonal` | קופה לאירועים צפויים | |
 | `/maaser` | מעשרות (שורה בסקירה כשמופעל) | |
+| `/iou` | הלוואות בין אנשים (מי חייב למי) | |
 | `/month-close` | סגירת חודש ודוח חודשי (להדפסה) | `cycle` |
 | `/simulator` | סימולטור: קיצוץ לפי קטגוריה, כדור שלג מול מפולת (לא נשמר כלום) | |
 | `/health` | בדיקת תקינות (מספר אדום בתפריט = בעיות פתוחות) | |
@@ -197,6 +199,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | מתוכננות | `GET/POST planned`, `PUT/PATCH/DELETE planned/:id`, `POST planned/:id/match` |
 | קופה לאירועים, סכום יומי | `GET/POST seasonal`, `PATCH/DELETE seasonal/:id`, `POST seasonal/:id/settle`, `PUT seasonal/pot`, `GET allowance` (גם בתוך `summary.allowance`) |
 | סגירת חודש | `GET month-close?cycle=`, `PUT month-close/:cycle/checks` `{checkId, answer}`, `POST/DELETE month-close/:cycle`, `GET month-report?cycle=` |
+| הלוואות בין אנשים | `GET/POST iou`, `PATCH/DELETE iou/:id` (`done`), `POST iou/:id/payments` `{txnId}` או `{date, amount}`, `DELETE iou/:id/payments/:pid`, `PUT iou/:id/source` `{txnId}`, `POST iou/:id/reject` `{txnId}` |
 | מעשרות | `GET maaser`, `PUT maaser/config` (שדות `MaaserConfig`) |
 | מעבר כרטיס וביטולים | `GET charge-moves`, `GET charge-moves/candidates?from=`, `POST charge-moves` `{fromAccountId, toAccountId (null = ביטול), seriesIds, marked?}`, `PATCH charge-moves/:id` `{status: moved/todo, notes?}`, `DELETE charge-moves/:id` |
 | בדיקת תקינות | `GET health`, `PUT health/ignore` `{id, ignore}` |
@@ -217,9 +220,9 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 `members`, `businesses`, `tags`, `budgets`, `balances`, `fx_rates`, `recurring_series`, `scheduled_items`, `planned_items`,
 `sinking_funds` (`kind`: general / seasonal), `seasonal_events`, `assets`, `asset_snapshots`, `asset_deposits`, `pension_reports`, `liabilities`, `liability_snapshots`,
 `insurance_policies`, `insurance_documents`, `holdings`, `quotes`, `quote_history`, `alerts`, `recommendation_states`,
-`month_closes` (חודש שנסגר: צילום מצב + חתימה), `month_close_checks` (התשובות לבדיקות), `charge_moves` (חיוב קבוע שמועבר או מבוטל: todo / moved / verified / failed), `scrape_runs`, `settings`, `schema_version`.
+`month_closes` (חודש שנסגר: צילום מצב + חתימה), `month_close_checks` (התשובות לבדיקות), `charge_moves` (חיוב קבוע שמועבר או מבוטל: todo / moved / verified / failed), `iou`, `iou_payments` (הלוואות בין אנשים והחזרים), `scrape_runs`, `settings`, `schema_version`.
 
-שינוי סכמה = מיגרציה חדשה בסוף `src/db/migrations.ts` (הבאה: 21) + עדכון הרשימה הזו.
+שינוי סכמה = מיגרציה חדשה בסוף `src/db/migrations.ts` (הבאה: 22) + עדכון הרשימה הזו.
 
 ### מפתחות `settings`
 | מפתח | משמעות |

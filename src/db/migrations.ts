@@ -726,6 +726,38 @@ export const migrations: Migration[] = [
       db.exec(`CREATE INDEX idx_charge_moves_status ON charge_moves(status)`);
     },
   },
+  {
+    version: 21,
+    name: 'personal loans between people (who owes whom) and their repayments',
+    up(db) {
+      // a row the money moved in (the loan itself or a repayment) is made a transfer: lending isn't spend and getting
+      // it back isn't income. txn_prev_kind keeps "kind|kind_source" to restore it when the link is removed.
+      db.exec(`CREATE TABLE iou (
+        id INTEGER PRIMARY KEY,
+        direction TEXT NOT NULL CHECK (direction IN ('owed_to_me','i_owe')),
+        person TEXT NOT NULL,
+        amount REAL NOT NULL CHECK (amount > 0),
+        date TEXT NOT NULL,                   -- when the money was lent / borrowed (YYYY-MM-DD)
+        due_date TEXT,
+        match_pattern TEXT,                   -- text in the Bit / transfer description; default: the person's name
+        txn_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL,  -- the row the money was lent / borrowed in
+        txn_prev_kind TEXT,
+        rejected_txn_ids TEXT,                -- JSON: rows the user said aren't it
+        notes TEXT,
+        done_at TEXT,                         -- repaid in full, or closed by hand
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`);
+      db.exec(`CREATE TABLE iou_payments (
+        id INTEGER PRIMARY KEY,
+        iou_id INTEGER NOT NULL REFERENCES iou(id) ON DELETE CASCADE,
+        date TEXT NOT NULL,
+        amount REAL NOT NULL CHECK (amount > 0),
+        txn_id INTEGER UNIQUE REFERENCES transactions(id) ON DELETE SET NULL,
+        txn_prev_kind TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`);
+    },
+  },
 ];
 
 type CategoryKind = 'expense' | 'income' | 'transfer' | 'card_payment' | 'savings';
