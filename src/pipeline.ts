@@ -8,6 +8,7 @@ import { refreshAlerts } from './analytics/alerts.js';
 import { refreshBoiRates } from './analytics/fx.js';
 import { refreshHistory, refreshQuotes } from './analytics/quotes.js';
 import { matchPlanned } from './analytics/planned.js';
+import { verifyChargeMoves } from './analytics/chargeMoves.js';
 
 export interface PipelineOptions {
   /** rows to categorize; defaults to every uncategorized row */
@@ -33,10 +34,12 @@ export async function runPipeline(db: DB = getDb(), opts: PipelineOptions = {}):
   // planned expenses whose real row arrived: link them (they stop counting, the real row counts)
   const planned = matchPlanned(db);
   const recurring = refreshRecurring(db).length;
+  // charges the user moved to another card / cancelled: arrived on the new one? charged again on the old one?
+  const moves = verifyChargeMoves(db);
   const scheduled = suggestScheduledItems(db);
   const paybacks = suggestPaybacks(db);
   const alerts = refreshAlerts(db);
-  return { categorized: ids.length, cardBillsKept: cardBills.kept, cardBillsDemoted: cardBills.demoted, immediateDebits: debits.matched, debitCards: debits.debitCards.length, transfers, plannedMatched: planned.matched, plannedAmbiguous: planned.ambiguous, recurring, scheduled, paybacks, alerts };
+  return { categorized: ids.length, cardBillsKept: cardBills.kept, cardBillsDemoted: cardBills.demoted, immediateDebits: debits.matched, debitCards: debits.debitCards.length, transfers, plannedMatched: planned.matched, plannedAmbiguous: planned.ambiguous, recurring, movesVerified: moves.verified, movesFailed: moves.failed, scheduled, paybacks, alerts };
 }
 
 // `npm run pipeline` — reprocess the database without scraping (set CATEGORY_API_URL to categorize via the API)

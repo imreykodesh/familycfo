@@ -701,6 +701,31 @@ export const migrations: Migration[] = [
       )`);
     },
   },
+  {
+    version: 20,
+    name: 'charge moves: moving recurring charges to another card / bank, and checking that cancelled ones stopped',
+    up(db) {
+      // one row per recurring charge being moved (to_account_id) or cancelled (to_account_id NULL).
+      // status: todo (on the list) → moved (the user did it; marked_at) → verified | failed (checked after every scrape)
+      db.exec(`CREATE TABLE charge_moves (
+        id INTEGER PRIMARY KEY,
+        recurring_series_id INTEGER REFERENCES recurring_series(id) ON DELETE SET NULL,
+        merchant_key TEXT NOT NULL,
+        description TEXT NOT NULL,            -- how the charge reads on the old account
+        from_account_id TEXT NOT NULL REFERENCES accounts(id),
+        to_account_id TEXT REFERENCES accounts(id),
+        amount REAL NOT NULL,                 -- the usual monthly amount (positive ILS)
+        day_of_month INTEGER,
+        status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo','moved','verified','failed')),
+        marked_at TEXT,                       -- YYYY-MM-DD the user said it was moved / cancelled
+        verified_at TEXT,
+        evidence_txn_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL,  -- the row that verified / failed it
+        notes TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`);
+      db.exec(`CREATE INDEX idx_charge_moves_status ON charge_moves(status)`);
+    },
+  },
 ];
 
 type CategoryKind = 'expense' | 'income' | 'transfer' | 'card_payment' | 'savings';
