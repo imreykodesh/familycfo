@@ -3,7 +3,7 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-route
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import {
-  ArrowLeftRight, ChartColumn, Bell, Briefcase, Calculator, CalendarCheck, HandHeart, HeartPulse, Shuffle, ClipboardCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
+  ArrowLeftRight, ChartColumn, Bell, Briefcase, Calculator, CalendarCheck, HandHeart, Handshake, HeartPulse, Shuffle, ClipboardCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
   ChartCandlestick, ScrollText, Settings2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
 } from 'lucide-react';
 import { api, type Alert, type HealthReport } from './api';
@@ -31,6 +31,7 @@ import Simulator from './pages/Simulator';
 import Health from './pages/Health';
 import ChargeMoves from './pages/ChargeMoves';
 import Maaser from './pages/Maaser';
+import IouPage from './pages/Iou';
 import { Picker, Segmented } from './components/ui';
 import { AgentChat } from './components/AgentChat';
 import { desktop, useDesktopNavigation } from './desktop';
@@ -60,6 +61,7 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/investments', label: 'השקעות', icon: ChartCandlestick },
   { to: '/pension', label: 'פנסיה וגמל', icon: Umbrella },
   { to: '/loans', label: 'הלוואות ומשכנתא', icon: Home },
+  { to: '/iou', label: 'הלוואות בין אנשים', icon: Handshake },
   { to: '/insurance', label: 'ביטוחים', icon: ShieldCheck },
   { to: '/categories', label: 'קטגוריות', icon: Layers },
   { to: '/logs', label: 'יומן ותקלות', icon: ScrollText },
@@ -284,6 +286,7 @@ export default function App() {
               <Route path="/health" element={<Health />} />
               <Route path="/charge-moves" element={<ChargeMoves />} />
               <Route path="/maaser" element={<Maaser />} />
+              <Route path="/iou" element={<IouPage />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/insurance" element={<Insurance />} />
               <Route path="/pension" element={<Pension />} />

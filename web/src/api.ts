@@ -377,3 +377,14 @@ export interface MaaserReport {
   months: { cycle: Cycle; income: number; excluded: number; required: number; given: number; balance: number; partial: boolean }[];
   totals: { required: number; given: number; remaining: number };
 }
+
+/** GET /iou: personal loans between people (src/analytics/iou.ts) */
+export interface IouCandidate { id: number; date: string; amount: number; description: string; accountId: string }
+export interface Iou {
+  id: number; direction: 'owed_to_me' | 'i_owe'; person: string; amount: number; date: string; dueDate: string | null;
+  matchPattern: string | null; txnId: number | null; notes: string | null; doneAt: string | null; paid: number; remaining: number; overdue: boolean;
+  payments: { id: number; date: string; amount: number; txnId: number | null; description: string | null }[];
+  source: { id: number; date: string; amount: number; description: string } | null;
+  paymentCandidates: IouCandidate[]; sourceCandidates: IouCandidate[];
+}
+export interface IouReport { items: Iou[]; totals: { owedToMe: number; iOwe: number } }

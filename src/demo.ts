@@ -137,6 +137,15 @@ function seedDemo(db: DB): void {
   // maaser (/maaser): 10% of the net income from three months ago, vs the monthly donation
   db.prepare(`INSERT INTO settings (key, value) VALUES ('maaser_cfg', ?)`).run(JSON.stringify({ enabled: true, startMonth: addDays(now, -75).slice(0, 7) }));
 
+  // personal loans (/iou): lent Noa 1,500 by Bit, she sent 500 back (offered as a repayment); a loan from the parents
+  tx(db, { account: BANK_A, date: addDays(now, -40), description: 'העברה בביט לנועה לוי', amount: -1500 });
+  tx(db, { account: BANK_A, date: addDays(now, -12), description: 'ביט מנועה לוי', amount: 500 });
+  db.prepare(`INSERT INTO iou (direction, person, amount, date, due_date, match_pattern) VALUES ('owed_to_me', 'נועה לוי', 1500, ?, ?, 'נועה')`)
+    .run(addDays(now, -40), addDays(now, 20));
+  const parents = Number(db.prepare(`INSERT INTO iou (direction, person, amount, date, notes) VALUES ('i_owe', 'ההורים', 20000, ?, 'עזרה בקניית הרכב')`)
+    .run(addDays(now, -200)).lastInsertRowid);
+  db.prepare(`INSERT INTO iou_payments (iou_id, date, amount) VALUES (?, ?, 5000)`).run(parents, addDays(now, -60));
+
   // moving card A's subscriptions to card B (/charge-moves): a list waiting to be ticked
   const move = db.prepare(`INSERT INTO charge_moves (merchant_key, description, from_account_id, to_account_id, amount, day_of_month)
     VALUES (?, ?, ?, ?, ?, 3)`);

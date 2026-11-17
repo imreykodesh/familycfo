@@ -6,6 +6,7 @@ import { unmatchedCardBills, upcomingCardCharges } from './cards.js';
 import { isOverdue, listPlanned } from './planned.js';
 import { seasonalPlan } from './seasonal.js';
 import { listChargeMoves, sameMerchant } from './chargeMoves.js';
+import { listIous } from './iou.js';
 
 export interface AlertDraft {
   type: string;
@@ -174,6 +175,20 @@ export function generateAlerts(db: DB, asOf = today()): AlertDraft[] {
       : { type: 'cancel_failed', severity: 'warning', dedupeKey: `cancel-failed:${m.id}:${e.id}`, txnIds: [e.id],
           title: `${m.description} חויב שוב אחרי הביטול`,
           message: `סימנתם שביטלתם אותו, אבל ב-${e.date} חויבו ${ils(e.amount)} ב${m.fromName}. כדאי לבדוק שהביטול נקלט, ולבקש החזר.` });
+  }
+
+  // personal loans: past their due date, and a row that looks like a repayment (src/analytics/iou.ts)
+  for (const i of listIous(db, asOf, txs)) {
+    if (i.overdue) {
+      drafts.push({ type: 'iou_due', severity: 'info', dedupeKey: `iou-due:${i.id}:${i.dueDate}`,
+        title: i.direction === 'owed_to_me' ? `${i.person} היה אמור להחזיר עד ${i.dueDate}` : `הגיע מועד ההחזר ל${i.person} (${i.dueDate})`,
+        message: `נשארו ${ils(i.remaining)} מתוך ${ils(i.amount)}.` });
+    }
+    for (const c of i.paymentCandidates) {
+      drafts.push({ type: 'iou_payment', severity: 'info', dedupeKey: `iou-pay:${i.id}:${c.id}`, txnIds: [c.id],
+        title: i.direction === 'owed_to_me' ? `נראה ש${i.person} החזיר/ה ${ils(c.amount)}` : `נראה שהחזרתם ל${i.person} ${ils(c.amount)}`,
+        message: `„${c.description}" מ-${c.date}. אפשר לאשר במסך „הלוואות בין אנשים".` });
+    }
   }
 
   // latest scrape per company failed

@@ -17,6 +17,7 @@ import { simulatorRoutes } from './routes/simulator.js';
 import { healthRoutes } from './routes/health.js';
 import { chargeMoveRoutes } from './routes/chargeMoves.js';
 import { maaserRoutes } from './routes/maaser.js';
+import { iouRoutes } from './routes/iou.js';
 import { setRate } from '../analytics/fx.js';
 
 import { localOnly, serveWeb } from './web.js';
@@ -124,6 +125,7 @@ export function buildApp(db: DB, opts: Pick<ServerOptions, 'webDist'> = {}): Fas
   healthRoutes(app, db);
   chargeMoveRoutes(app, db);
   maaserRoutes(app, db);
+  iouRoutes(app, db);
 
   app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
     app.log.error(err);

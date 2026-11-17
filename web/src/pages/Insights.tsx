@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Alert, type ChargeMove, type Recommendation } from '../api';
 import { day, todayIso } from '../format';
 import {
-  Activity, Ban, Bell, CalendarDays, CloudOff, Copy, CreditCard, Lightbulb, type LucideIcon, PieChart, Receipt, Repeat, RotateCcw, Shuffle,
+  Activity, Ban, Bell, CalendarDays, CloudOff, Copy, CreditCard, Lightbulb, type LucideIcon, PieChart, Receipt, Repeat, RotateCcw, Shuffle, Handshake,
   Sparkles, TrendingUp, TriangleAlert, X,
 } from 'lucide-react';
 import { Empty, ErrorBox, Loading, Money, PageHeader, SectionTitle, SeverityDot } from '../components/ui';
@@ -16,13 +16,13 @@ interface RecurringRow { id: number; merchantKey: string; accountId: string; kin
 const ALERT_TYPES: Record<string, string> = {
   budget: 'תקציב', duplicate: 'חיוב כפול', anomaly: 'חריגה', new_subscription: 'מנוי חדש', price_increase: 'עליית מחיר',
   low_balance: 'יתרה נמוכה', card_vs_balance: 'חיוב כרטיס', fee: 'עמלה', unmatched_card_bill: 'כרטיס לא נסרק',
-  scrape_failed: 'סריקה', big_day: 'יום חריג', cancel_failed: 'ביטול שלא נקלט', move_still_on_old: 'מעבר כרטיס',
+  scrape_failed: 'סריקה', big_day: 'יום חריג', cancel_failed: 'ביטול שלא נקלט', move_still_on_old: 'מעבר כרטיס', iou_due: 'הלוואה', iou_payment: 'החזר הלוואה',
 };
 
 const ALERT_ICONS: Record<string, LucideIcon> = {
   budget: PieChart, duplicate: Copy, anomaly: Activity, new_subscription: Repeat, price_increase: TrendingUp,
   low_balance: TriangleAlert, card_vs_balance: CreditCard, fee: Receipt, unmatched_card_bill: CreditCard,
-  scrape_failed: CloudOff, big_day: CalendarDays, cancel_failed: Ban, move_still_on_old: Shuffle,
+  scrape_failed: CloudOff, big_day: CalendarDays, cancel_failed: Ban, move_still_on_old: Shuffle, iou_due: Handshake, iou_payment: Handshake,
 };
 const SEVERITY_TILE: Record<string, string> = { critical: 'var(--negative)', warning: 'var(--chart-3)' };
 
