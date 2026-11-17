@@ -90,6 +90,7 @@ function seedDemo(db: DB): void {
     bank(BANK_B, 9, 'משכורת - בטא טכנולוגיות', 13800, 'משכורת');
     bank(BANK_B, 2, 'משכנתא - בנק לאומי', -5200);
     bank(BANK_A, 15, 'עיריית תל אביב - ארנונה', -680);
+    bank(BANK_A, 20, 'הוראת קבע - עמותת לב חם', -3000, 'תרומה');
     bank(BANK_A, 20, 'חברת החשמל', -between(380, 620));
     bank(BANK_B, 12, 'הוראת קבע לחסכון', -1000);
     bank(BANK_A, 4, 'העברה לחשבון יואב', -4000);
@@ -132,6 +133,9 @@ function seedDemo(db: DB): void {
     VALUES (?, ?, ?, ?, ?, ?, ?)`);
   for (const company of ['hapoalim', 'leumi', 'isracard', 'max']) run.run(company, `${addDays(now, -1)}T05:00:00Z`, `${addDays(now, -1)}T05:02:00Z`, 1, null, null, 12);
   for (const hour of ['05', '06']) run.run('max', `${now}T${hour}:00:00Z`, `${now}T${hour}:01:00Z`, 0, 'INVALID_PASSWORD', 'Invalid password', 0);
+
+  // maaser (/maaser): 10% of the net income from three months ago, vs the monthly donation
+  db.prepare(`INSERT INTO settings (key, value) VALUES ('maaser_cfg', ?)`).run(JSON.stringify({ enabled: true, startMonth: addDays(now, -75).slice(0, 7) }));
 
   // moving card A's subscriptions to card B (/charge-moves): a list waiting to be ticked
   const move = db.prepare(`INSERT INTO charge_moves (merchant_key, description, from_account_id, to_account_id, amount, day_of_month)

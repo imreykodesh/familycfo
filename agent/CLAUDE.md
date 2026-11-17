@@ -35,6 +35,7 @@ Markdown links whose target starts with `/` open that screen of the app (the cha
 | Fixed commitments of the month / scheduled items | `/fixed`, `/fixed#scheduled` |
 | Budgets | `/budgets` |
 | Expected-events fund (holidays, summer…) | `/seasonal` |
+| Maaser (tithe): required, given, left to give | `/maaser` |
 | Month close and monthly report | `/month-close`, `/month-close?cycle=YYYY-MM` |
 | Simulator: cutting a category, snowball vs avalanche | `/simulator` |
 | Health check (failed scrapes, stale balances, duplicates, missing months…) | `/health` |
@@ -76,6 +77,7 @@ At most 3 per answer, at the end, short labels.
 | Events / trips (tags) | `POST /tags` `{name, startDate?, endDate?, budget?, notes?}`, `PATCH /tags/ID`; tag rows `POST /events/ID/transactions` `{add: [txIds], remove: [txIds]}` |
 | Fixed items (standing orders, salary, loans) | `POST /scheduled` `{name, kind: "fixed_expense"/"income"/"loan"/"mortgage"/"card_charge", amount (signed: + income, − outflow), dayOfMonth, amountMode?: "fixed"/"estimated", bankAccountId?, categoryId?, memberId?, matchPattern?, status: "confirmed"}`; `PATCH /scheduled/ID` (`status: "dismissed"` to stop it) |
 | Expected-events fund | add an event `POST /seasonal` `{name, calendar: "hebrew"/"gregorian", month: "Tishri"…"Elul" (Hebrew; "Adar" = Adar II in a leap year) or "1"…"12", day, amount, notes?}`; `PATCH /seasonal/ID` (same fields + `active`), `DELETE /seasonal/ID`; after an event: `POST /seasonal/ID/settle` `{date: the pendingSettle date, spent}`; the pot's balance `PUT /seasonal/pot` `{balance}` |
+| Maaser settings | `PUT /maaser/config` with any of `{enabled, percent, base: "net"/"gross", grossMonthly, donationCategoryIds (null = the default), excludeCategoryIds, excludePatterns: [texts], startMonth: "YYYY-MM", openingBalance (+ owed / − given ahead)}` |
 | Moving / cancelling recurring charges | list `POST /charge-moves` `{fromAccountId, toAccountId (null = cancel), seriesIds: [recurring series ids from GET /charge-moves/candidates?from=ACCOUNT], marked?: true (already done)}`; tick one done `PATCH /charge-moves/ID` `{status: "moved"}` (`"todo"` = not yet); `DELETE /charge-moves/ID` |
 | Health check | hide a row as it reads now `PUT /health/ignore` `{id (from GET /health), ignore: true}` (`false` shows it again); confirm / reject a payback link `PATCH /links/ID` `{status: "confirmed"/"rejected"}` |
 | Month close | answer a check `PUT /month-close/YYYY-MM/checks` `{checkId (from GET /month-close), answer: "ok" / "ended" / "later" / "other" / null}` ("ended" ends that fixed item from this month); close `POST /month-close/YYYY-MM`, reopen `DELETE /month-close/YYYY-MM` |

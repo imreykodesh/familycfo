@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, CreditCard, Gauge as GaugeIcon, Gift, Landmark, LayoutDashboard, PiggyBank, Receipt, Sparkles, TriangleAlert, Users, Wallet } from 'lucide-react';
-import { api, qs, type CycleSummary, type DailyAllowance, type InstallmentPlan, type MonthCloseResponse, type Summary } from '../api';
+import { CalendarDays, CreditCard, Gauge as GaugeIcon, Gift, HandHeart, Landmark, LayoutDashboard, PiggyBank, Receipt, Sparkles, TriangleAlert, Users, Wallet } from 'lucide-react';
+import { api, qs, type CycleSummary, type DailyAllowance, type InstallmentPlan, type MaaserReport, type MonthCloseResponse, type Summary } from '../api';
 import { useFilters, useLookups } from '../state';
 import { day, monthName } from '../format';
 import { ErrorBox, Loading, MemberBadge, Money, MoreLink, PageHeader, Progress, SectionTitle, SeverityDot, Stat } from '../components/ui';
@@ -21,6 +21,9 @@ export default function Dashboard() {
   const history = useQuery({ queryKey: ['cashflow', params], queryFn: () => api.get<CycleSummary[]>(`/cashflow${qs({ ...params, cycles: 7 })}`) });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const monthClose = useQuery({ queryKey: ['month-close', undefined], queryFn: () => api.get<MonthCloseResponse>('/month-close') });
+  // maaser: only when it's turned on (settings.maaser_cfg)
+  const maaserOn = (() => { try { return JSON.parse(meta?.settings.maaser_cfg ?? '{}').enabled === true; } catch { return false; } })();
+  const maaser = useQuery({ queryKey: ['maaser'], enabled: maaserOn, queryFn: () => api.get<MaaserReport>('/maaser') });
 
   if (isLoading) return <Loading />;
   if (error || !data) return <ErrorBox error={error} />;
@@ -82,6 +85,17 @@ export default function Dashboard() {
       )}
 
       <AllowanceCard a={data.allowance} />
+
+      {maaserOn && maaser.data && (
+        <Link to="/maaser" className="card mt-4 flex items-center justify-between gap-3 py-3 text-sm transition-colors hover:bg-accent/40">
+          <span className="flex items-center gap-2"><HandHeart className="h-4 w-4 text-primary" />
+            {maaser.data.totals.remaining > 0
+              ? <>מעשרות: נשאר לתת <Money value={maaser.data.totals.remaining} className="font-semibold" /></>
+              : <>מעשרות: נתתם הכול{maaser.data.totals.remaining < 0 && <> ועוד <Money value={-maaser.data.totals.remaining} /> מראש</>}</>}
+          </span>
+          <span className="shrink-0 text-primary">לפירוט ←</span>
+        </Link>
+      )}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <div className="card min-w-0 lg:col-span-2">

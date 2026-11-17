@@ -97,6 +97,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `allowance.ts` | כמה אפשר להוציא ביום: `computeAllowance` (טהורה), `buildAllowance`, `committedCardAmount` |
 | `hebcal.ts` | לוח עברי בלי ספרייה (Intl): `hebrewParts`, `occurrences`, `nextOccurrence`, `lastOccurrence`, `HEBREW_MONTHS` |
 | `monthClose.ts` | סגירת חודש ודוח: `monthChecks`, `monthCloseState`, `answerCheck` ("הסתיים" מסיים את הפריט הקבוע), `closeMonth` / `reopenMonth`, `monthSignature`, `closeHistory`, `monthReport` |
+| `maaser.ts` | מעשרות: `maaserReport` (חודש אחרי חודש: הכנסה, נדרש, ניתן, יתרה מצטברת), `maaserMonth` (טהורה), `maaserConfig` / `parseMaaserConfig` / `saveMaaserConfig`, `donationCategories` |
 | `chargeMoves.ts` | מעבר כרטיס וביטול חיובים: `moveCandidates`, `addChargeMoves`, `markChargeMove`, `listChargeMoves`, `verifyChargeMoves` (ב-pipeline אחרי הקבועות), `sameMerchant` |
 | `health.ts` | בדיקת תקינות: `healthReport` (משיכות, גיבוי, יתרות ישנות, כרטיס בלי חשבון חיוב, כפילויות, בלי קטגוריה, חודשים חסרים, קישורי החזר והוצאות מתוכננות שממתינים, הצעות לכללי סיווג), `setIgnored`, `wordingOf` |
 | `simulator.ts` | סימולטור, טהור ובלי imports (רץ גם בדפדפן): `debtPlan` (בסיס / כדור שלג / מפולת, חודש אחרי חודש), `compareDebtPlans`, `debtQueue`, `cutImpact` |
@@ -122,7 +123,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrapeJob.ts` | משיכה מהממשק: `startScrape({ from, showBrowser, checkOnly, loginIds })`, `submitOtp` |
 | `scheduler.ts` | משיכה יומית בשעה קבועה (`scrape_time`) |
 | `appEvents.ts` | אירועים לאפליקציית הדסקטופ (`emitAppEvent`) |
-| `routes/*.ts` | transactions, analytics, categories, events, insurance, pension, investments, reports (העלאת דוח וייבוא JSON), seasonal (קופה לאירועים + `allowance`), monthClose (סגירת חודש ודוח), simulator (קלט לסימולטור והשוואת החזר חובות), health (בדיקת תקינות), chargeMoves (מעבר כרטיס וביטולים) |
+| `routes/*.ts` | transactions, analytics, categories, events, insurance, pension, investments, reports (העלאת דוח וייבוא JSON), seasonal (קופה לאירועים + `allowance`), monthClose (סגירת חודש ודוח), simulator (קלט לסימולטור והשוואת החזר חובות), health (בדיקת תקינות), chargeMoves (מעבר כרטיס וביטולים), maaser (מעשרות) |
 
 ### `desktop/` — Electron
 | קובץ | תפקיד |
@@ -165,6 +166,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `/fixed` | קבועות החודש | `#scheduled`, `#planned` |
 | `/budgets` | תקציב | |
 | `/seasonal` | קופה לאירועים צפויים | |
+| `/maaser` | מעשרות (שורה בסקירה כשמופעל) | |
 | `/month-close` | סגירת חודש ודוח חודשי (להדפסה) | `cycle` |
 | `/simulator` | סימולטור: קיצוץ לפי קטגוריה, כדור שלג מול מפולת (לא נשמר כלום) | |
 | `/health` | בדיקת תקינות (מספר אדום בתפריט = בעיות פתוחות) | |
@@ -195,6 +197,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | מתוכננות | `GET/POST planned`, `PUT/PATCH/DELETE planned/:id`, `POST planned/:id/match` |
 | קופה לאירועים, סכום יומי | `GET/POST seasonal`, `PATCH/DELETE seasonal/:id`, `POST seasonal/:id/settle`, `PUT seasonal/pot`, `GET allowance` (גם בתוך `summary.allowance`) |
 | סגירת חודש | `GET month-close?cycle=`, `PUT month-close/:cycle/checks` `{checkId, answer}`, `POST/DELETE month-close/:cycle`, `GET month-report?cycle=` |
+| מעשרות | `GET maaser`, `PUT maaser/config` (שדות `MaaserConfig`) |
 | מעבר כרטיס וביטולים | `GET charge-moves`, `GET charge-moves/candidates?from=`, `POST charge-moves` `{fromAccountId, toAccountId (null = ביטול), seriesIds, marked?}`, `PATCH charge-moves/:id` `{status: moved/todo, notes?}`, `DELETE charge-moves/:id` |
 | בדיקת תקינות | `GET health`, `PUT health/ignore` `{id, ignore}` |
 | סימולטור | `GET simulator/base` (הקלט; החישוב רץ בדפדפן), `GET simulator/debts?extra=&cpi=&fee=` (אותה השוואה בשרת, לצ'אט) |
@@ -230,6 +233,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrape_time`, `scrape_catch_up` | משיכה יומית בדסקטופ |
 | `notify_scrape`, `notify_alerts` | התראות בדסקטופ |
 | `onboarding_done` | האשף הושלם |
+| `maaser_cfg` | JSON: הגדרות המעשרות (`enabled`, `percent`, `base` net/gross, `grossMonthly`, `donationCategoryIds`, `excludeCategoryIds`, `excludePatterns`, `startMonth`, `openingBalance`). נכתב רק דרך `PUT /api/maaser/config` |
 | `health_ignore` | JSON: מזהה בדיקה ← הנוסח שהמשתמש הסתיר (נכתב רק דרך `PUT /api/health/ignore`) |
 
 הצ'אט יכול לשנות רק `cycle_start_day`, `balance_buffer`, `scrape_months_back`.
