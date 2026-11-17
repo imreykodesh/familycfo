@@ -3,7 +3,7 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-route
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import {
-  ArrowLeftRight, ChartColumn, Bell, Briefcase, CalendarCheck, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
+  ArrowLeftRight, ChartColumn, Bell, Briefcase, CalendarCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
   ChartCandlestick, ScrollText, Settings2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
 } from 'lucide-react';
 import { api, type Alert } from './api';
@@ -25,6 +25,7 @@ import Insurance from './pages/Insurance';
 import Pension from './pages/Pension';
 import Investments from './pages/Investments';
 import Logs from './pages/Logs';
+import Seasonal from './pages/Seasonal';
 import { Picker, Segmented } from './components/ui';
 import { AgentChat } from './components/AgentChat';
 import { desktop, useDesktopNavigation } from './desktop';
@@ -39,6 +40,7 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/transactions', label: 'תנועות', icon: ArrowLeftRight },
   { to: '/fixed', label: 'קבועות החודש', icon: CalendarCheck },
   { to: '/budgets', label: 'תקציב', icon: PieChart },
+  { to: '/seasonal', label: 'קופה לאירועים צפויים', icon: Gift },
   { to: '/trends', label: 'מגמות הוצאות', icon: ChartColumn },
   { to: '/cashflow', label: 'תזרים ותחזית', icon: TrendingUp },
   { to: '/insights', label: 'תובנות והתראות', icon: Lightbulb },
@@ -263,6 +265,7 @@ export default function App() {
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/fixed" element={<Fixed />} />
               <Route path="/budgets" element={<Budgets />} />
+              <Route path="/seasonal" element={<Seasonal />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/insurance" element={<Insurance />} />
               <Route path="/pension" element={<Pension />} />

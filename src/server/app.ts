@@ -11,6 +11,7 @@ import { insuranceRoutes } from './routes/insurance.js';
 import { pensionRoutes } from './routes/pension.js';
 import { reportRoutes } from './routes/reports.js';
 import { investmentRoutes } from './routes/investments.js';
+import { seasonalRoutes } from './routes/seasonal.js';
 import { setRate } from '../analytics/fx.js';
 
 import { localOnly, serveWeb } from './web.js';
@@ -112,6 +113,7 @@ export function buildApp(db: DB, opts: Pick<ServerOptions, 'webDist'> = {}): Fas
   pensionRoutes(app, db);
   reportRoutes(app, db);
   investmentRoutes(app, db);
+  seasonalRoutes(app, db);
 
   app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
     app.log.error(err);

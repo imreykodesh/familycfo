@@ -8,6 +8,8 @@ import { existsSync, rmSync } from 'fs';
 import { openDb, type DB } from './db/connection.js';
 import { addDays, today } from './analytics/common.js';
 import { runPipeline } from './pipeline.js';
+import { lastOccurrence } from './analytics/hebcal.js';
+import { ensureSeasonalPot } from './analytics/seasonal.js';
 
 const PATH = process.env.BANK_DB || 'demo.db';
 
@@ -132,6 +134,22 @@ function seedDemo(db: DB): void {
   holding.run('AAPL', 'Apple', 15, 'USD', 190, addDays(now, -200), null, null);
   holding.run('TEVA.TA', 'טבע', 120, 'ILS', 62, addDays(now, -120), null, null);
   holding.run('CASH', 'מזומן בתיק', 3500, 'ILS', 1, null, 1, now);
+
+  // the expected-events fund: holidays by the Hebrew calendar, summer, school supplies. The summer one was already
+  // settled; the latest of the others that passed waits for "how much did it take from the pot?"
+  const pot = ensureSeasonalPot(db);
+  db.prepare(`UPDATE sinking_funds SET balance = 3300 WHERE id = ?`).run(pot);
+  const created = `${addDays(now, -150)} 09:00:00`;
+  const event = db.prepare(`INSERT INTO seasonal_events (name, calendar, month, day, amount, settled_through, notes, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const [name, calendar, month, day, amount, notes] of [
+    ['חגי תשרי', 'hebrew', 'Tishri', 1, 4200, 'אירוח, מתנות, בגדים'], ['חנוכה', 'hebrew', 'Kislev', 25, 900, null],
+    ['פסח', 'hebrew', 'Nisan', 15, 5200, 'ניקיון, אירוח, טיול'], ['חופש הגדול', 'hebrew', 'Av', 1, 2800, 'קייטנות'],
+    ['ציוד לבית ספר', 'gregorian', '8', 25, 1200, null],
+  ] as const) {
+    const settled = name === 'חגי תשרי' ? null : lastOccurrence(calendar, month, day, now);
+    event.run(name, calendar, month, day, amount, settled, notes, created);
+  }
 }
 
 async function main() {

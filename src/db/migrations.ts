@@ -666,6 +666,26 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 18,
+    name: 'expected-events fund (holidays by the Hebrew calendar)',
+    up(db) {
+      // general = a savings fund; seasonal = the pot for the expected events below (src/analytics/seasonal.ts)
+      db.exec(`ALTER TABLE sinking_funds ADD COLUMN kind TEXT NOT NULL DEFAULT 'general'`);
+      db.exec(`CREATE TABLE seasonal_events (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        calendar TEXT NOT NULL DEFAULT 'hebrew' CHECK (calendar IN ('hebrew','gregorian')),
+        month TEXT NOT NULL,                  -- hebrew: Tishri … Elul (Adar = Adar II in a leap year); gregorian: '1'..'12'
+        day INTEGER NOT NULL CHECK (day BETWEEN 1 AND 31),
+        amount REAL NOT NULL,                 -- expected cost of one occurrence (positive ILS)
+        active INTEGER NOT NULL DEFAULT 1,
+        settled_through TEXT,                 -- the last occurrence (YYYY-MM-DD) the user said how much it took from the pot
+        notes TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`);
+    },
+  },
 ];
 
 type CategoryKind = 'expense' | 'income' | 'transfer' | 'card_payment' | 'savings';

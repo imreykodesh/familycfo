@@ -9,7 +9,7 @@ export interface Tag {
   id: number; name: string; color: string | null; startDate: string | null; endDate: string | null;
   budget: number | null; notes: string | null; archived: number;
 }
-export interface Fund { id: number; name: string; monthlyTarget: number; balance: number; goalAmount: number | null; goalDate: string | null }
+export interface Fund { id: number; name: string; monthlyTarget: number; balance: number; goalAmount: number | null; goalDate: string | null; kind?: 'general' | 'seasonal' }
 export interface Meta {
   members: Member[]; accounts: Account[]; categories: Category[]; businesses: Business[]; tags: Tag[]; funds: Fund[];
   settings: Record<string, string>;
@@ -86,6 +86,25 @@ export interface Summary {
   forecast: Omit<Forecast, 'asOf' | 'horizonEnd'>;
   cardCharges: CardCharge[]; budgets: BudgetStatus[]; alerts: Alert[]; capacity: SavingsCapacity; income: IncomeExpectation;
   monthIncome: MonthIncome;
+  allowance: DailyAllowance;
+}
+/** GET /allowance: how much can go out every day until the end of the planning period (src/analytics/allowance.ts) */
+export interface DailyAllowance {
+  asOf: string; until: string; perDay: number; bindingDate: string; bindingDays: number; daysLeft: number;
+  lowest: { date: string; balance: number }; endBalance: number; shortfall: number;
+  startBalance: number; buffer: number; incoming: number; outgoing: number;
+  seasonal: { perMonth: number; reserve: number }; pace: number; status: 'ok' | 'tight' | 'none';
+  nextIncome: { date: string; name: string; amount: number } | null; stale: boolean;
+}
+export type EventCalendar = 'hebrew' | 'gregorian';
+export interface SeasonalEvent {
+  id: number; name: string; calendar: EventCalendar; month: string; day: number; dateLabel: string; amount: number; active: boolean;
+  notes: string | null; nextDate: string; daysUntil: number; covered: boolean; pendingSettle: string | null; suggested: number | null;
+}
+/** GET /seasonal: the expected-events fund (src/analytics/seasonal.ts) */
+export interface SeasonalPlan {
+  asOf: string; pot: { fundId: number | null; balance: number }; perMonth: number; events: SeasonalEvent[]; next: SeasonalEvent | null;
+  missing: number; suggestions: { key: string; name: string; calendar: EventCalendar; month: string; day: number; suggested: number | null }[];
 }
 /** A month's income: what arrived + recurring income still expected before it ends. */
 export interface MonthIncome {
