@@ -686,6 +686,21 @@ export const migrations: Migration[] = [
       )`);
     },
   },
+  {
+    version: 19,
+    name: 'month close: answers to the checks',
+    up(db) {
+      // a closed month is a month_closes row (snapshot + signature); the answers live here, before and after closing.
+      // answer: ok (approved as fine) | ended | later | other (a fixed item that didn't show up this month)
+      db.exec(`CREATE TABLE month_close_checks (
+        cycle TEXT NOT NULL,                  -- YYYY-MM (cycle key)
+        check_id TEXT NOT NULL,               -- e.g. account:max:1234, fixed:12, uncategorized
+        answer TEXT NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (cycle, check_id)
+      )`);
+    },
+  },
 ];
 
 type CategoryKind = 'expense' | 'income' | 'transfer' | 'card_payment' | 'savings';

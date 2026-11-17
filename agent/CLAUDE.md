@@ -35,6 +35,7 @@ Markdown links whose target starts with `/` open that screen of the app (the cha
 | Fixed commitments of the month / scheduled items | `/fixed`, `/fixed#scheduled` |
 | Budgets | `/budgets` |
 | Expected-events fund (holidays, summer…) | `/seasonal` |
+| Month close and monthly report | `/month-close`, `/month-close?cycle=YYYY-MM` |
 | Spend trends: all, one parent category, one sub-category | `/trends`, `/trends?parent=ID`, `/trends?parent=ID&leaf=ID` |
 | Cash flow and forecast | `/cashflow` |
 | Insights and alerts | `/insights` |
@@ -72,6 +73,7 @@ At most 3 per answer, at the end, short labels.
 | Events / trips (tags) | `POST /tags` `{name, startDate?, endDate?, budget?, notes?}`, `PATCH /tags/ID`; tag rows `POST /events/ID/transactions` `{add: [txIds], remove: [txIds]}` |
 | Fixed items (standing orders, salary, loans) | `POST /scheduled` `{name, kind: "fixed_expense"/"income"/"loan"/"mortgage"/"card_charge", amount (signed: + income, − outflow), dayOfMonth, amountMode?: "fixed"/"estimated", bankAccountId?, categoryId?, memberId?, matchPattern?, status: "confirmed"}`; `PATCH /scheduled/ID` (`status: "dismissed"` to stop it) |
 | Expected-events fund | add an event `POST /seasonal` `{name, calendar: "hebrew"/"gregorian", month: "Tishri"…"Elul" (Hebrew; "Adar" = Adar II in a leap year) or "1"…"12", day, amount, notes?}`; `PATCH /seasonal/ID` (same fields + `active`), `DELETE /seasonal/ID`; after an event: `POST /seasonal/ID/settle` `{date: the pendingSettle date, spent}`; the pot's balance `PUT /seasonal/pot` `{balance}` |
+| Month close | answer a check `PUT /month-close/YYYY-MM/checks` `{checkId (from GET /month-close), answer: "ok" / "ended" / "later" / "other" / null}` ("ended" ends that fixed item from this month); close `POST /month-close/YYYY-MM`, reopen `DELETE /month-close/YYYY-MM` |
 | Savings funds, assets, loans | `POST/PATCH /funds`, `/assets`, `/asset-snapshots` `{assetId, date, value}`, `/liabilities`, `/liability-snapshots` `{liabilityId, date, balance}` |
 | Members, account names / owners | `PATCH /members/ID` `{name?, color?}`, `PATCH /accounts/ID` `{displayName?, ownerMemberId?, billingBankAccountId?}` |
 | Insurance policies, stock holdings | `POST/PATCH/DELETE /insurance(/ID)` (fields as in `GET /insurance`), `POST/PATCH/DELETE /investments/holdings(/ID)` `{symbol, quantity, buyPrice?, buyDate?, broker?, ownerMemberId?}` |
