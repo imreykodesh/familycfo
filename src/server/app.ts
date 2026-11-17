@@ -81,7 +81,17 @@ export function buildApp(db: DB, opts: Pick<ServerOptions, 'webDist'> = {}): Fas
       // the desktop app: daily scrape and notifications
       'scrape_time', 'scrape_catch_up', 'notify_scrape', 'notify_alerts', 'onboarding_done',
       // how dates show in the transactions list: gregorian | both (with the Hebrew date)
-      'date_display'];
+      'date_display',
+      // simple (default: the main screens only) | full; screens pinned to the menu in simple mode (JSON array of paths)
+      'ui_mode', 'nav_pinned'];
+    if (body.ui_mode != null && !['simple', 'full'].includes(String(body.ui_mode))) {
+      return reply.code(400).send({ error: 'ui_mode must be simple or full' });
+    }
+    if (body.nav_pinned != null) {
+      let ok = false;
+      try { const v = JSON.parse(String(body.nav_pinned)); ok = Array.isArray(v) && v.every(p => typeof p === 'string' && /^\/[a-z-]*$/.test(p)); } catch { /* not JSON */ }
+      if (!ok) return reply.code(400).send({ error: 'nav_pinned must be a JSON array of paths' });
+    }
     if (body.date_display != null && !['gregorian', 'both'].includes(String(body.date_display))) {
       return reply.code(400).send({ error: 'date_display must be gregorian or both' });
     }

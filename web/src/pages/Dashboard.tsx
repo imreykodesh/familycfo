@@ -2,8 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, CreditCard, Gauge as GaugeIcon, Gift, HandHeart, Landmark, LayoutDashboard, PiggyBank, Receipt, Sparkles, TriangleAlert, Users, Wallet } from 'lucide-react';
-import { api, qs, type CycleSummary, type DailyAllowance, type InstallmentPlan, type MaaserReport, type MonthCloseResponse, type Summary } from '../api';
-import { useFilters, useLookups } from '../state';
+import { api, qs, type CycleSummary, type DailyAllowance, type InstallmentPlan, type MaaserReport, type MonthCloseResponse, type MonthPlan, type Summary } from '../api';
+import { useFilters, useLookups, useUiMode } from '../state';
 import { day, monthName } from '../format';
 import { ErrorBox, Loading, MemberBadge, Money, MoreLink, PageHeader, Progress, SectionTitle, SeverityDot, Stat } from '../components/ui';
 import { BarList, CashflowBars, DonutChart, ForecastChart, Gauge } from '../components/charts';
@@ -14,7 +14,13 @@ import { categoryIcon, hueFor, MemberAvatar } from '@/lib/visuals';
 const shortMonth = (key: string) => new Intl.DateTimeFormat('he-IL', { month: 'short' }).format(new Date(`${key}-01T12:00:00`));
 
 export default function Dashboard() {
+  const { simple } = useUiMode();
+  return simple ? <SimpleOverview /> : <FullOverview />;
+}
+
+function FullOverview() {
   const { params } = useFilters();
+  const { setSimple } = useUiMode();
   const { accountName, member, meta } = useLookups();
   const { data, isLoading, error } = useQuery({ queryKey: ['summary', params], queryFn: () => api.get<Summary>(`/summary${qs(params)}`) });
   const installments = useQuery({ queryKey: ['installments', params], queryFn: () => api.get<InstallmentPlan[]>(`/installments${qs(params)}`) });
@@ -58,7 +64,8 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageHeader title="סקירה" icon={LayoutDashboard} subtitle={`מחזור ${monthName(cycle.cycle.key)} · ${day(cycle.cycle.start)} – ${day(cycle.cycle.end)}`} actions={<ScrapeButton />} />
+      <PageHeader title="סקירה" icon={LayoutDashboard} subtitle={`מחזור ${monthName(cycle.cycle.key)} · ${day(cycle.cycle.start)} – ${day(cycle.cycle.end)}`}
+        actions={<><button type="button" className="btn" onClick={() => setSimple(true)}>תצוגה פשוטה</button><ScrapeButton /></>} />
 
       <div className="grid grid-cols-2 gap-3 max-[22.5rem]:grid-cols-1 md:gap-4 lg:grid-cols-4">
         <Stat index={0} icon={Landmark} color="var(--chart-5)" label="יתרה בבנקים עכשיו" value={bankTotal} tone={bankTotal < 0 ? 'bad' : undefined}
@@ -402,6 +409,167 @@ function InstallmentsCard({ plans }: { plans: InstallmentPlan[] }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+/** Sub-categories rolled up into their parent, biggest spend first. */
+function groupByParent(byCategory: Summary['cycle']['byCategory']) {
+  const grouped = new Map<string, { key: string; name: string; spend: number; categoryId: number | null }>();
+  for (const c of byCategory) {
+    const key = String(c.parentId ?? c.categoryId ?? 'none');
+    const g = grouped.get(key) ?? { key, name: c.parentName ?? c.name, spend: 0, categoryId: c.parentId ?? c.categoryId };
+    g.spend += c.spend;
+    grouped.set(key, g);
+  }
+  return [...grouped.values()].filter(c => c.spend > 0).sort((a, b) => b.spend - a.spend);
+}
+
+/** The simple overview: what's left to spend this month, income and spend, and where it went. */
+function SimpleOverview() {
+  const { params } = useFilters();
+  const { meta } = useLookups();
+  const { setSimple } = useUiMode();
+  const { data, isLoading, error } = useQuery({ queryKey: ['summary', params], queryFn: () => api.get<Summary>(`/summary${qs(params)}`) });
+  const plan = useQuery({ queryKey: ['month-plan', params], queryFn: () => api.get<MonthPlan>(`/month-plan${qs(params)}`) });
+  const maaserOn = (() => { try { return JSON.parse(meta?.settings.maaser_cfg ?? '{}').enabled === true; } catch { return false; } })();
+  const maaser = useQuery({ queryKey: ['maaser'], enabled: maaserOn, queryFn: () => api.get<MaaserReport>('/maaser') });
+
+  if (isLoading) return <Loading />;
+  if (error || !data) return <ErrorBox error={error} />;
+
+  const { cycle, forecast } = data;
+  const p = plan.data;
+  const txHref = (extra: string) => `/transactions?cycle=${cycle.cycle.key}${extra}`;
+  const catHref = (c: { categoryId: number | null }) => `/transactions${c.categoryId != null ? `?category=${c.categoryId}&cycle=${cycle.cycle.key}` : '?review=1'}`;
+  const categories = groupByParent(cycle.byCategory);
+  const bankTotal = forecast.total.startBalance;
+
+  return (
+    <>
+      <PageHeader title="סקירה" icon={LayoutDashboard} subtitle={`${monthName(cycle.cycle.key)} · ${day(cycle.cycle.start)} – ${day(cycle.cycle.end)}`} actions={<ScrapeButton />} />
+
+      {p ? <LeftToSpend p={p} /> : <div className="card skeleton h-48" />}
+
+      {data.allowance.status === 'none' && (
+        <Link to="/cashflow" className="card mt-4 flex items-center justify-between gap-3 border-rose-300/60 py-3 text-sm transition-colors hover:bg-accent/40 dark:border-rose-900/60">
+          <span className="flex items-center gap-2"><TriangleAlert className="h-4 w-4 shrink-0 text-negative" />
+            {data.allowance.shortfall > 0
+              ? <>לפי היתרה בבנק והחיובים הידועים, החשבון יירד ל-<Money value={data.allowance.lowest.balance} /> ב-{day(data.allowance.lowest.date)}.</>
+              : <>לפי היתרה בבנק והחיובים הידועים, אין כרגע מרווח להוצאות עד {day(data.allowance.bindingDate)}.</>}
+          </span>
+          <span className="shrink-0 text-primary">לתזרים ←</span>
+        </Link>
+      )}
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 md:gap-4">
+        <Stat index={0} icon={Wallet} color="var(--positive)" label="הכנסות החודש" tone="good"
+          value={<Link to={txHref('&kind=income')} className="hover:underline" title="ההכנסות שנכנסו"><Money value={p?.income ?? cycle.income} animated /></Link>}
+          hint={p && p.incomePending > 0 ? <>נכנסו <Money value={p.incomeReceived} /> · עוד צפויות <Money value={p.incomePending} /></> : 'כל ההכנסות הצפויות נכנסו'} />
+        <Stat index={1} icon={Receipt} color="var(--chart-3)" label="הוצאות החודש"
+          value={<Link to={txHref('&kind=expense,refund')} className="hover:underline" title="התנועות שמרכיבות את הסכום"><Money value={cycle.spend} animated /></Link>}
+          hint={<><Link to={txHref('&fixed=1')} className="hover:underline">קבועות <Money value={cycle.fixed} /></Link> · <Link to={txHref('&fixed=0')} className="hover:underline">שוטפות <Money value={cycle.dynamic} /></Link></>} />
+        <Stat index={2} icon={Landmark} color="var(--chart-5)" label="בבנק עכשיו" value={bankTotal} tone={bankTotal < 0 ? 'bad' : undefined}
+          hint={<>צפוי ב-{day(forecast.period.end)}: <Money value={forecast.total.endOfCycle} /></>} />
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-5">
+        <div className="card min-w-0 lg:col-span-3">
+          <SectionTitle icon={PiggyBank} color="var(--chart-6)" action={<MoreLink to={txHref('&kind=expense,refund')}>כל ההוצאות</MoreLink>}>על מה הלך הכסף</SectionTitle>
+          {categories.length === 0 ? <div className="text-sm text-muted-foreground">עוד אין הוצאות החודש</div> : (
+            <BarList items={categories.slice(0, 8).map(c => {
+              const Icon = categoryIcon(c.name);
+              return { key: c.key, label: c.name, value: c.spend, icon: <Icon />, href: catHref(c),
+                sub: cycle.spend > 0 ? <span className="num">{Math.round((c.spend / cycle.spend) * 100)}%</span> : undefined };
+            })} />
+          )}
+        </div>
+        <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
+          {maaserOn && maaser.data && (
+            <Link to="/maaser" className="card flex items-center justify-between gap-3 py-3 text-sm transition-colors hover:bg-accent/40">
+              <span className="flex items-center gap-2"><HandHeart className="h-4 w-4 text-primary" />
+                {maaser.data.totals.remaining > 0
+                  ? <>מעשרות: נשאר לתת <Money value={maaser.data.totals.remaining} className="font-semibold" /></>
+                  : <>מעשרות: נתתם הכול{maaser.data.totals.remaining < 0 && <> ועוד <Money value={-maaser.data.totals.remaining} /> מראש</>}</>}
+              </span>
+              <span className="shrink-0 text-primary">←</span>
+            </Link>
+          )}
+          <div className="card min-w-0 flex-1">
+            <SectionTitle icon={TriangleAlert} color="var(--negative)" action={data.alerts.length > 3 ? <MoreLink to="/insights">הכל</MoreLink> : undefined}>כדאי לשים לב</SectionTitle>
+            {data.alerts.length === 0 ? <div className="text-sm text-muted-foreground">אין כרגע משהו שדורש טיפול</div> : (
+              <div className="space-y-1">
+                {data.alerts.slice(0, 3).map(a => (
+                  <Link key={a.id} to={a.href ?? '/insights'} className="flex gap-2.5 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-accent/50">
+                    <SeverityDot severity={a.severity} />
+                    <div className="min-w-0">
+                      <div className="font-medium">{a.title}</div>
+                      <div className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{a.message}</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <p className="mt-6 text-center text-xs text-muted-foreground">
+        תחזית, חיובי כרטיסים, עסקאות בתשלומים וחיסכון מומלץ נמצאים בתצוגה המלאה.{' '}
+        <button type="button" className="text-primary hover:underline" onClick={() => setSimple(false)}>לתצוגה המלאה</button>
+      </p>
+    </>
+  );
+}
+
+/** Income − fixed costs, loans and installments − planned one-offs = what's there for everyday spending; minus what went. */
+function LeftToSpend({ p }: { p: MonthPlan }) {
+  const committed = p.fixed.total + p.otherFixed.amount + p.installments.total;
+  const over = p.variableLeft < 0;
+  const status = over ? 'over' : p.forVariable > 0 && p.variableSpent > p.forVariable * 0.8 ? 'warning' : 'ok';
+  const rows: { label: ReactNode; value: number; sign?: '+' | '−' | '='; strong?: boolean }[] = [
+    { label: 'הכנסות החודש', value: p.income },
+    { label: <Link to="/fixed" className="hover:underline">קבועות, הלוואות ותשלומים ←</Link>, value: committed, sign: '−' },
+  ];
+  if (p.planned.total > 0) rows.push({ label: 'הוצאות שהזנתם מראש', value: p.planned.total, sign: '−' });
+  rows.push({ label: 'נשאר להוצאות שוטפות', value: p.forVariable, sign: '=', strong: true });
+  rows.push({ label: 'כבר הוצאתם בשוטף', value: p.variableSpent, sign: '−' });
+  return (
+    <div className="card">
+      <SectionTitle icon={GaugeIcon} color={over ? 'var(--negative)' : 'var(--positive)'}>נשאר להוציא החודש</SectionTitle>
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-6">
+        <div className="min-w-0">
+          {over ? (
+            <>
+              <div className="text-3xl font-bold tracking-tight text-negative">חרגתם ב-<Money value={-p.variableLeft} animated /></div>
+              <p className="mt-2 text-sm leading-relaxed text-fg-subtle">ההוצאות השוטפות כבר עברו את מה שנשאר מההכנסה אחרי הקבועות.</p>
+            </>
+          ) : (
+            <>
+              <Money value={p.variableLeft} animated className="block text-4xl font-bold tracking-tight text-positive" />
+              <p className="mt-2 text-sm leading-relaxed text-fg-subtle">
+                כ-<Money value={p.perDayLeft} className="font-semibold text-foreground" /> ליום, ב-{p.daysLeft} הימים שנשארו עד {day(p.cycle.end)}.
+              </p>
+            </>
+          )}
+          <Progress className="mt-4" value={p.variableSpent} max={Math.max(0, p.forVariable)} status={status} />
+          <div className="mt-1.5 text-xs text-muted-foreground">
+            הוצאתם <Money value={p.variableSpent} /> מתוך <Money value={Math.max(0, p.forVariable)} /> להוצאות שוטפות
+          </div>
+        </div>
+        <div className="min-w-0 rounded-xl bg-muted/50 p-3 text-sm">
+          {rows.map((r, i) => (
+            <div key={i} className={`flex items-center justify-between gap-3 py-1 ${r.sign === '=' ? 'mt-1 border-t border-line-soft pt-2' : ''}`}>
+              <span className={`min-w-0 ${r.strong ? 'font-medium' : 'text-fg-subtle'}`}>{r.label}</span>
+              <span className={`shrink-0 ${r.strong ? 'font-semibold' : 'font-medium'}`}>{r.sign && r.sign !== '=' && <span className="me-0.5 text-fg-subtle">{r.sign}</span>}<Money value={r.value} /></span>
+            </div>
+          ))}
+          <div className="mt-1 flex items-center justify-between gap-3 border-t border-line-soft pt-2">
+            <span className="font-medium">נשאר</span>
+            <Money value={p.variableLeft} colored className="font-bold" />
+          </div>
+        </div>
       </div>
     </div>
   );

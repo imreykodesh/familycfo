@@ -142,9 +142,9 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 ### `web/src/` — ממשק (עברית, RTL)
 | קובץ | תפקיד |
 |---|---|
-| `App.tsx` | ניווט ונתיבים |
+| `App.tsx` | ניווט ונתיבים. במצב פשוט: תפריט קצר (`MAIN_SCREENS` + מסכים מוצמדים) והשאר תחת "עוד כלים" עם כפתור הצמדה |
 | `api.ts` | `api.get/post/put/patch/delete`, `qs`, כל הטיפוסים |
-| `state.tsx` | מסנן גלובלי (בן בית / עסק / תגיות): `useFilters`, `useMeta`, `useLookups` |
+| `state.tsx` | מסנן גלובלי (בן בית / עסק / תגיות): `useFilters`, `useMeta`, `useLookups`; `useUiMode` (מצב פשוט / מלא, `MAIN_SCREENS`, הצמדה לתפריט) |
 | `desktop.ts` | גישה ל-`window.familycfo`, `useDesktopNavigation` |
 | `format.ts` | `money`, `day`, `monthName`, `KIND_LABELS`, `todayIso`, `currentCycleKey` (החודש של היום לפי יום תחילת החודש) |
 | `components/ui.tsx` | רכיבים משותפים: `Money`, `Stat`, `Modal`, `Picker`, `Segmented`, `PageHeader`, בוררים |
@@ -164,7 +164,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 
 | נתיב | מסך | פרמטרים ב-URL |
 |---|---|---|
-| `/` | סקירה | |
+| `/` | סקירה (במצב פשוט: נשאר להוציא החודש, הכנסות, הוצאות, בבנק, על מה הלך הכסף, התראות; במצב מלא: הכול) | |
 | `/transactions` | תנועות | `cycle`, `search`, `category`, `account`, `kind` (גם כמה, למשל `expense,refund`), `review=1`, `charge`, `fixed=1/0` |
 | `/fixed` | קבועות החודש | `#scheduled`, `#planned` |
 | `/budgets` | תקציב | |
@@ -241,6 +241,8 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `notify_scrape`, `notify_alerts` | התראות בדסקטופ |
 | `onboarding_done` | האשף הושלם |
 | `date_display` | `gregorian` / `both`: תאריך עברי ליד הלועזי ברשימת התנועות |
+| `ui_mode` | `simple` (ברירת מחדל: תפריט מקוצר וסקירה פשוטה) / `full` |
+| `nav_pinned` | JSON: נתיבי מסכים שהוצמדו לתפריט במצב פשוט (כשאין ערך: `/maaser` אם המעשרות פעילות) |
 | `maaser_cfg` | JSON: הגדרות המעשרות (`enabled`, `percent`, `base` net/gross, `grossMonthly`, `donationCategoryIds`, `excludeCategoryIds`, `excludePatterns`, `startMonth`, `openingBalance`). נכתב רק דרך `PUT /api/maaser/config` |
 | `health_ignore` | JSON: מזהה בדיקה ← הנוסח שהמשתמש הסתיר (נכתב רק דרך `PUT /api/health/ignore`) |
 

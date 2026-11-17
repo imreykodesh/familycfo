@@ -235,7 +235,8 @@ export function refundOf(t: Tx): number {
 
 // ---- dates & cycles --------------------------------------------------------------------
 
-export const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+const ISRAEL_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' });
+export const today = () => ISRAEL_DAY.format(new Date());
 
 export function addDays(date: string, days: number): string {
   const d = new Date(`${date}T12:00:00Z`);

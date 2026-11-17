@@ -31,8 +31,10 @@ const md5 = (s: string) => crypto.createHash('md5').update(s).digest('hex');
 export const dateKey = (iso: string) => iso.substring(0, 10);
 
 /** Calendar date in Israel (scrapers return local midnight as e.g. 2026-01-06T22:00:00Z). */
+// building an Intl formatter is slow and localDate runs for every row of every analysis: build it once
+const ISRAEL_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' });
 export function localDate(iso: string): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date(iso));
+  return ISRAEL_DATE.format(new Date(iso));
 }
 
 /** The pre-migration identifier: md5(account|date|description|amount|currency). */

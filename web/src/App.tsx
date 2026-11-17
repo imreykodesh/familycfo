@@ -4,10 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import {
   ArrowLeftRight, ChartColumn, Bell, Briefcase, Calculator, CalendarCheck, AlarmClock, HandHeart, Handshake, HeartPulse, Shuffle, ClipboardCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
-  ChartCandlestick, ScrollText, Settings2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
+  ChartCandlestick, ChevronDown, LayoutGrid, Pin, PinOff, ScrollText, Settings2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
 } from 'lucide-react';
 import { api, type Alert, type HealthReport } from './api';
-import { useFilters, useMeta } from './state';
+import { MAIN_SCREENS, useFilters, useMeta, useUiMode } from './state';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
 import Budgets from './pages/Budgets';
@@ -69,6 +69,60 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/logs', label: 'יומן ותקלות', icon: ScrollText },
   { to: '/settings', label: 'הגדרות', icon: Settings2 },
 ];
+
+type NavEntry = (typeof NAV)[number];
+
+/** One menu link; `pin` adds a button that keeps the screen in the short menu (or takes it out). */
+function NavItem({ item: n, badge, rail, onNavigate, pin, dim }: {
+  item: NavEntry; badge?: number; rail: boolean; onNavigate: () => void;
+  pin?: { pinned: boolean; toggle: () => void }; dim?: boolean;
+}) {
+  const Icon = n.icon;
+  const link = (
+    <NavLink to={n.to} end={n.to === '/'} onClick={onNavigate}
+      className={({ isActive }) => cn('group relative flex h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors duration-(--duration-fast)',
+        'md:h-10 md:justify-center md:px-0 lg:h-9 lg:justify-start lg:px-2.5', pin && 'lg:pe-8',
+        isActive ? 'font-semibold text-white' : cn('hover:bg-white/[0.05] hover:text-white', dim ? 'text-sidebar-muted' : 'text-sidebar-foreground'))}>
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <motion.span layoutId="nav-active" aria-hidden transition={{ type: 'spring', stiffness: 460, damping: 36 }}
+              className="absolute inset-0 rounded-lg bg-sidebar-accent shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+              <span className="absolute inset-y-2 start-0 w-[3px] rounded-full bg-gradient-to-b from-[var(--chart-5)] to-[var(--chart-6)]" />
+            </motion.span>
+          )}
+          <Icon className={cn('relative h-[1.1rem] w-[1.1rem] shrink-0 transition-[color,transform] duration-(--duration-base) group-hover:scale-110',
+            isActive ? 'text-sidebar-primary' : 'text-sidebar-muted group-hover:text-sidebar-foreground')} />
+          <span className="relative flex-1 truncate md:max-lg:sr-only">{n.label}</span>
+          {(badge ?? 0) > 0 && (
+            <span className="num relative flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[0.6875rem] font-semibold leading-none text-white
+              md:max-lg:absolute md:max-lg:end-1 md:max-lg:top-1 md:max-lg:h-4 md:max-lg:min-w-4 md:max-lg:text-[0.625rem]">
+              {badge}
+            </span>
+          )}
+        </>
+      )}
+    </NavLink>
+  );
+  return (
+    <li className="group/item relative">
+      {rail ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{link}</TooltipTrigger>
+          <TooltipContent side="left">{n.label}</TooltipContent>
+        </Tooltip>
+      ) : link}
+      {pin && (
+        <button type="button" onClick={pin.toggle}
+          title={pin.pinned ? 'להוציא מהתפריט (יישאר ב"עוד כלים")' : 'להוסיף לתפריט הראשי'}
+          aria-label={pin.pinned ? `להוציא את ${n.label} מהתפריט` : `להוסיף את ${n.label} לתפריט`}
+          className="absolute end-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-muted opacity-60 transition hover:bg-white/10 hover:text-white hover:opacity-100 focus-visible:opacity-100 md:max-lg:hidden lg:opacity-0 lg:group-hover/item:opacity-100">
+          {pin.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+        </button>
+      )}
+    </li>
+  );
+}
 
 function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(
@@ -156,6 +210,15 @@ export default function App() {
   const badges: Record<string, number> = { '/insights': unseen, '/health': health?.problems ?? 0 };
   const drawerMode = !isTabletUp;
   const current = NAV.find(n => (n.to === '/' ? pathname === '/' : pathname.startsWith(n.to)));
+  // simple mode: the main screens + pinned ones in the menu (settings last), the rest under "עוד כלים"
+  const { simple, pinned, setSimple, togglePin } = useUiMode();
+  const inMenu = (to: string) => !simple || MAIN_SCREENS.includes(to) || pinned.includes(to);
+  const menu = [...NAV.filter(n => inMenu(n.to) && n.to !== '/settings'), ...NAV.filter(n => n.to === '/settings')];
+  const more = NAV.filter(n => !inMenu(n.to));
+  const moreBadge = more.reduce((s, n) => s + (badges[n.to] ?? 0), 0);
+  const [moreOpen, setMoreOpen] = useState(false);
+  // on a screen from "עוד כלים", open the list so it's clear where you are
+  useEffect(() => { if (current && !inMenu(current.to)) setMoreOpen(true); }, [current?.to, simple]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (isTabletUp) setNavOpen(false); }, [isTabletUp]);
 
@@ -209,46 +272,39 @@ export default function App() {
 
         <nav className="relative flex-1 overflow-y-auto px-2.5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 md:max-lg:overflow-visible lg:px-3">
           <ul className="space-y-0.5">
-            {NAV.map(n => {
-              const Icon = n.icon;
-              const link = (
-                <NavLink to={n.to} end={n.to === '/'} onClick={() => setNavOpen(false)}
-                  className={({ isActive }) => cn('group relative flex h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors duration-(--duration-fast)',
-                    'md:h-10 md:justify-center md:px-0 lg:h-9 lg:justify-start lg:px-2.5',
-                    isActive ? 'font-semibold text-white' : 'text-sidebar-foreground hover:bg-white/[0.05] hover:text-white')}>
-                  {({ isActive }) => (
-                    <>
-                      {isActive && (
-                        <motion.span layoutId="nav-active" aria-hidden transition={{ type: 'spring', stiffness: 460, damping: 36 }}
-                          className="absolute inset-0 rounded-lg bg-sidebar-accent shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
-                          <span className="absolute inset-y-2 start-0 w-[3px] rounded-full bg-gradient-to-b from-[var(--chart-5)] to-[var(--chart-6)]" />
-                        </motion.span>
-                      )}
-                      <Icon className={cn('relative h-[1.1rem] w-[1.1rem] shrink-0 transition-[color,transform] duration-(--duration-base) group-hover:scale-110',
-                        isActive ? 'text-sidebar-primary' : 'text-sidebar-muted group-hover:text-sidebar-foreground')} />
-                      <span className="relative flex-1 truncate md:max-lg:sr-only">{n.label}</span>
-                      {(badges[n.to] ?? 0) > 0 && (
-                        <span className="num relative flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[0.6875rem] font-semibold leading-none text-white
-                          md:max-lg:absolute md:max-lg:end-1 md:max-lg:top-1 md:max-lg:h-4 md:max-lg:min-w-4 md:max-lg:text-[0.625rem]">
-                          {badges[n.to]}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </NavLink>
-              );
-              return (
-                <li key={n.to}>
-                  {isRail ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>{link}</TooltipTrigger>
-                      <TooltipContent side="left">{n.label}</TooltipContent>
-                    </Tooltip>
-                  ) : link}
-                </li>
-              );
-            })}
+            {menu.map(n => (
+              <NavItem key={n.to} item={n} badge={badges[n.to]} rail={isRail} onNavigate={() => setNavOpen(false)}
+                pin={simple && !MAIN_SCREENS.includes(n.to) ? { pinned: true, toggle: () => togglePin(n.to) } : undefined} />
+            ))}
           </ul>
+          {simple && more.length > 0 && (
+            <div className="mt-3 border-t border-white/[0.06] pt-3">
+              <button type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen(o => !o)}
+                className="relative flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-sidebar-foreground transition-colors hover:bg-white/[0.05] hover:text-white md:justify-center md:px-0 lg:h-9 lg:justify-start lg:px-2.5"
+                title="עוד כלים">
+                <LayoutGrid className="h-[1.1rem] w-[1.1rem] shrink-0 text-sidebar-muted" />
+                <span className="flex-1 truncate text-start md:max-lg:sr-only">עוד כלים</span>
+                {moreBadge > 0 && !moreOpen && (
+                  <span className="num flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[0.6875rem] font-semibold leading-none text-white md:max-lg:absolute md:max-lg:end-1 md:max-lg:top-1">{moreBadge}</span>
+                )}
+                <ChevronDown className={cn('h-4 w-4 shrink-0 text-sidebar-muted transition-transform md:max-lg:hidden', moreOpen ? '' : 'rotate-90')} />
+              </button>
+              {moreOpen && (
+                <ul className="mt-0.5 space-y-0.5">
+                  {more.map(n => (
+                    <NavItem key={n.to} item={n} badge={badges[n.to]} rail={isRail} onNavigate={() => setNavOpen(false)} dim
+                      pin={{ pinned: false, toggle: () => togglePin(n.to) }} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          <div className="mt-3 border-t border-white/[0.06] pt-3 md:max-lg:hidden">
+            <button type="button" onClick={() => setSimple(!simple)}
+              className="w-full rounded-lg px-2.5 py-1.5 text-start text-xs text-sidebar-muted transition-colors hover:bg-white/[0.05] hover:text-white">
+              {simple ? 'להציג את כל המסכים בתפריט' : 'לחזור לתפריט המקוצר'}
+            </button>
+          </div>
         </nav>
       </aside>
 

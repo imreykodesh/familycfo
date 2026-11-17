@@ -67,7 +67,8 @@ export interface Portfolio {
 
 type Row = Record<string, any>;
 
-const localDate = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date(iso));
+const ISRAEL_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' });
+const localDate = (iso: string) => ISRAEL_DAY.format(new Date(iso));
 
 function loadHoldings(db: DB): Row[] {
   return db.prepare(`
