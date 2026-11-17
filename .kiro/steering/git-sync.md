@@ -80,5 +80,5 @@ git checkout -B task/<תיאור-קצר> origin/main
 
 ## ענפים
 
-ענפי משימה לא נשארים. בסוף משימה `git branch -r` צריך להראות רק `origin/main` (ואת `origin/desktop-export` כל עוד
-המחשב של המשתמש עדיין עובד עליו — הוא מוחזק זהה ל-`main` עד שהמחשב יעבור ל-`main`).
+ענפי משימה לא נשארים. בסוף משימה `git branch -r` צריך להראות רק `origin/main`.
+(`desktop-export` נמחק ב-17.11.2026 אחרי שכל מה שבו כבר היה ב-`main`; המחשב עובד על `main`.)
