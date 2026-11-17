@@ -3,7 +3,7 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-route
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import {
-  ArrowLeftRight, ChartColumn, Bell, Briefcase, Calculator, CalendarCheck, HeartPulse, Shuffle, ClipboardCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
+  ArrowLeftRight, ChartColumn, Bell, Briefcase, Calculator, CalendarCheck, HandHeart, HeartPulse, Shuffle, ClipboardCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
   ChartCandlestick, ScrollText, Settings2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
 } from 'lucide-react';
 import { api, type Alert, type HealthReport } from './api';
@@ -30,6 +30,7 @@ import MonthClose from './pages/MonthClose';
 import Simulator from './pages/Simulator';
 import Health from './pages/Health';
 import ChargeMoves from './pages/ChargeMoves';
+import Maaser from './pages/Maaser';
 import { Picker, Segmented } from './components/ui';
 import { AgentChat } from './components/AgentChat';
 import { desktop, useDesktopNavigation } from './desktop';
@@ -45,6 +46,7 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/fixed', label: 'קבועות החודש', icon: CalendarCheck },
   { to: '/budgets', label: 'תקציב', icon: PieChart },
   { to: '/seasonal', label: 'קופה לאירועים צפויים', icon: Gift },
+  { to: '/maaser', label: 'מעשרות', icon: HandHeart },
   { to: '/month-close', label: 'סגירת חודש ודוח', icon: ClipboardCheck },
   { to: '/simulator', label: 'סימולטור', icon: Calculator },
   { to: '/health', label: 'בדיקת תקינות', icon: HeartPulse },
@@ -281,6 +283,7 @@ export default function App() {
               <Route path="/simulator" element={<Simulator />} />
               <Route path="/health" element={<Health />} />
               <Route path="/charge-moves" element={<ChargeMoves />} />
+              <Route path="/maaser" element={<Maaser />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/insurance" element={<Insurance />} />
               <Route path="/pension" element={<Pension />} />

@@ -366,3 +366,14 @@ export interface MoveCandidate {
   seriesId: number; merchantKey: string; description: string; kind: string; amount: number; dayOfMonth: number | null;
   lastDate: string | null; categoryName: string | null; listed: boolean;
 }
+
+/** GET /maaser: maaser month by month (src/analytics/maaser.ts); settings in settings.maaser_cfg */
+export interface MaaserConfig {
+  enabled: boolean; percent: number; base: 'net' | 'gross'; grossMonthly: number | null; donationCategoryIds: number[] | null;
+  excludeCategoryIds: number[]; excludePatterns: string[]; startMonth: string | null; openingBalance: number;
+}
+export interface MaaserReport {
+  config: MaaserConfig; donationCategories: { id: number; name: string }[];
+  months: { cycle: Cycle; income: number; excluded: number; required: number; given: number; balance: number; partial: boolean }[];
+  totals: { required: number; given: number; remaining: number };
+}
