@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import type { DB } from './connection.js';
 import { dataPath } from '../paths.js';
@@ -21,4 +21,11 @@ export async function dailyBackup(db: DB, dir = dataPath('backups'), keep = 14):
   }
   for (const old of existing.sort().slice(0, Math.max(0, existing.length - keep))) rmSync(join(dir, old), { force: true });
   return made;
+}
+
+/** The day (YYYY-MM-DD) of the newest backup in `dir`, or null when there is none. */
+export function latestBackup(dir = dataPath('backups')): string | null {
+  if (!existsSync(dir)) return null;
+  const last = readdirSync(dir).filter(f => NAME.test(f)).sort().at(-1);
+  return last ? NAME.exec(last)![1] : null;
 }

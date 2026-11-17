@@ -345,3 +345,11 @@ export interface SimulatorBase {
   skipped: { id: number; name: string; reason: string }[];
   assumptions: { cpiAnnual: number };
 }
+
+/** GET /health: every check in one list (src/analytics/health.ts) */
+export interface HealthAction { label: string; method: 'POST' | 'PATCH'; path: string; body: Record<string, unknown> }
+export interface HealthItem {
+  id: string; kind: 'sync' | 'backup' | 'uncategorized' | 'duplicates' | 'gaps' | 'rule' | 'links' | 'planned' | 'billing' | 'stale';
+  status: 'problem' | 'suggestion' | 'ok'; title: string; detail?: string; href?: string; hrefLabel?: string; actions?: HealthAction[]; ignored?: boolean;
+}
+export interface HealthReport { items: HealthItem[]; problems: number; suggestions: number }

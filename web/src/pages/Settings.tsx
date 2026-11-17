@@ -120,7 +120,7 @@ export default function Settings() {
         <button className="btn mt-3" onClick={() => create.mutate({ path: '/members', body: { name: `בן בית ${meta.members.length + 1}`, color: '#16a34a' } })}><Plus />בן בית</button>
       </Section>
 
-      <Section title="חשבונות וכרטיסים" icon={Wallet} color="var(--chart-2)" subtitle="שייכו כל חשבון וכרטיס לבן משפחה, וקבעו מאיזה חשבון בנק משולם כל כרטיס.">
+      <Section id="accounts" title="חשבונות וכרטיסים" icon={Wallet} color="var(--chart-2)" subtitle="שייכו כל חשבון וכרטיס לבן משפחה, וקבעו מאיזה חשבון בנק משולם כל כרטיס.">
         <div className="scroll-x card-bleed"><table className="table">
           <thead><tr><th>חשבון</th><th>שם תצוגה</th><th>של מי</th><th>משולם מ-</th><th>נסרק לאחרונה</th><th>פעיל</th></tr></thead>
           <tbody>

@@ -3,10 +3,10 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-route
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import {
-  ArrowLeftRight, ChartColumn, Bell, Briefcase, Calculator, CalendarCheck, ClipboardCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
+  ArrowLeftRight, ChartColumn, Bell, Briefcase, Calculator, CalendarCheck, HeartPulse, ClipboardCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
   ChartCandlestick, ScrollText, Settings2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
 } from 'lucide-react';
-import { api, type Alert } from './api';
+import { api, type Alert, type HealthReport } from './api';
 import { useFilters, useMeta } from './state';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
@@ -28,6 +28,7 @@ import Logs from './pages/Logs';
 import Seasonal from './pages/Seasonal';
 import MonthClose from './pages/MonthClose';
 import Simulator from './pages/Simulator';
+import Health from './pages/Health';
 import { Picker, Segmented } from './components/ui';
 import { AgentChat } from './components/AgentChat';
 import { desktop, useDesktopNavigation } from './desktop';
@@ -45,6 +46,7 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/seasonal', label: 'קופה לאירועים צפויים', icon: Gift },
   { to: '/month-close', label: 'סגירת חודש ודוח', icon: ClipboardCheck },
   { to: '/simulator', label: 'סימולטור', icon: Calculator },
+  { to: '/health', label: 'בדיקת תקינות', icon: HeartPulse },
   { to: '/trends', label: 'מגמות הוצאות', icon: ChartColumn },
   { to: '/cashflow', label: 'תזרים ותחזית', icon: TrendingUp },
   { to: '/insights', label: 'תובנות והתראות', icon: Lightbulb },
@@ -141,6 +143,9 @@ export default function App() {
   const drawer = useRef<HTMLElement>(null);
   const { data: alerts } = useQuery({ queryKey: ['alerts', 'open'], queryFn: () => api.get<Alert[]>('/alerts') });
   const unseen = alerts?.filter(a => !a.seenAt).length ?? 0;
+  const { data: health } = useQuery({ queryKey: ['health'], queryFn: () => api.get<HealthReport>('/health'), staleTime: 60_000 });
+  // the red number next to a menu item: new alerts on insights, open problems on the health check
+  const badges: Record<string, number> = { '/insights': unseen, '/health': health?.problems ?? 0 };
   const drawerMode = !isTabletUp;
   const current = NAV.find(n => (n.to === '/' ? pathname === '/' : pathname.startsWith(n.to)));
 
@@ -214,10 +219,10 @@ export default function App() {
                       <Icon className={cn('relative h-[1.1rem] w-[1.1rem] shrink-0 transition-[color,transform] duration-(--duration-base) group-hover:scale-110',
                         isActive ? 'text-sidebar-primary' : 'text-sidebar-muted group-hover:text-sidebar-foreground')} />
                       <span className="relative flex-1 truncate md:max-lg:sr-only">{n.label}</span>
-                      {n.to === '/insights' && unseen > 0 && (
+                      {(badges[n.to] ?? 0) > 0 && (
                         <span className="num relative flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[0.6875rem] font-semibold leading-none text-white
                           md:max-lg:absolute md:max-lg:end-1 md:max-lg:top-1 md:max-lg:h-4 md:max-lg:min-w-4 md:max-lg:text-[0.625rem]">
-                          {unseen}
+                          {badges[n.to]}
                         </span>
                       )}
                     </>
@@ -272,6 +277,7 @@ export default function App() {
               <Route path="/seasonal" element={<Seasonal />} />
               <Route path="/month-close" element={<MonthClose />} />
               <Route path="/simulator" element={<Simulator />} />
+              <Route path="/health" element={<Health />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/insurance" element={<Insurance />} />
               <Route path="/pension" element={<Pension />} />

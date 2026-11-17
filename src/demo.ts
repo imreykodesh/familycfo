@@ -127,6 +127,12 @@ function seedDemo(db: DB): void {
     start_date, end_date, monthly_payment, payment_day, bank_account_id, match_pattern) VALUES ('משכנתא', 'mortgage', 'לאומי', 2, 1100000, 4.6, 'prime',
     '2021-06-01', '2046-06-01', 5200, 2, ?, 'משכנתא')`).run(BANK_B).lastInsertRowid);
   db.prepare(`INSERT INTO liability_snapshots (liability_id, date, balance) VALUES (?, ?, ?)`).run(mortgage, now, 905000);
+  // scrape history: every company worked yesterday; today Max's login failed twice (shows on /health)
+  const run = db.prepare(`INSERT INTO scrape_runs (company, started_at, finished_at, success, error_type, error_message, new_transactions)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  for (const company of ['hapoalim', 'leumi', 'isracard', 'max']) run.run(company, `${addDays(now, -1)}T05:00:00Z`, `${addDays(now, -1)}T05:02:00Z`, 1, null, null, 12);
+  for (const hour of ['05', '06']) run.run('max', `${now}T${hour}:00:00Z`, `${now}T${hour}:01:00Z`, 0, 'INVALID_PASSWORD', 'Invalid password', 0);
+
   // a CPI-linked car loan and a savings goal, so the simulator (/simulator) has something to compare
   const carLoan = Number(db.prepare(`INSERT INTO liabilities (name, type, lender, owner_member_id, original_principal, interest_rate, index_type,
     start_date, end_date, monthly_payment) VALUES ('הלוואת רכב', 'loan', 'מימון ישיר', 1, 80000, 3.5, 'cpi', '2024-03-01', '2029-03-01', 1450)`).run().lastInsertRowid);
