@@ -335,3 +335,13 @@ export interface MonthReport {
   recommendations: { title: string; detail: string; monthlySaving: number }[];
   closed: MonthCloseState['closed']; todo: number;
 }
+
+/** GET /simulator/base: the simulator's inputs (src/analytics/simulatorBase.ts); the simulation itself runs in the browser */
+export interface SimulatorBase {
+  months: { count: number; from: string | null; to: string | null };
+  categories: { categoryId: number; name: string; parentName: string | null; average: number; fixed: number }[];
+  goals: { id: number; name: string; balance: number; goalAmount: number; goalDate: string | null; monthlyTarget: number }[];
+  debts: { id: number; name: string; balance: number; annualRate: number; monthlyPayment: number; cpiLinked: boolean; balanceDate: string; indexType: string | null }[];
+  skipped: { id: number; name: string; reason: string }[];
+  assumptions: { cpiAnnual: number };
+}
