@@ -20,8 +20,11 @@ export interface PipelineOptions {
 
 /** Everything that runs after a scrape: classify → kinds/transfers → recurring → suggestions → alerts. */
 export async function runPipeline(db: DB = getDb(), opts: PipelineOptions = {}): Promise<Record<string, number>> {
+  // the given rows, plus older uncategorized rows the card company categorized (no API call needed for them)
   const ids = opts.txIds
-    ?? (db.prepare(`SELECT id FROM transactions WHERE category_id IS NULL`).pluck().all() as number[]);
+    ? [...new Set([...opts.txIds, ...db.prepare(`SELECT id FROM transactions
+        WHERE category_id IS NULL AND COALESCE(category_source, '') != 'manual' AND TRIM(COALESCE(source_category, '')) != ''`).pluck().all() as number[]])]
+    : (db.prepare(`SELECT id FROM transactions WHERE category_id IS NULL`).pluck().all() as number[]);
 
   if (opts.fetchRates !== false) {
     try { await refreshBoiRates(db); } catch (err) { console.warn('  FX rates not refreshed:', (err as Error).message); }
