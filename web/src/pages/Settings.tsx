@@ -76,6 +76,11 @@ export default function Settings() {
               }} />
             <span className="mt-1.5 block text-xs text-zinc-500">בכל לחיצה על ״עדכון נתונים״ (1–24). בנקים כמו דיסקונט ומזרחי מחזירים לכל היותר 12 חודשים; כרטיסי אשראי — יותר. מה שכבר נשמר נשאר, כך שההיסטוריה מתארכת עם הזמן.</span>
           </label>
+          <div>
+            <span className="label">תאריכים ברשימת התנועות</span>
+            <Segmented value={meta.settings.date_display === 'both' ? 'both' : 'gregorian'} onChange={v => saveSettings.mutate({ date_display: v })}
+              options={[{ value: 'gregorian', label: 'לועזי' }, { value: 'both', label: 'לועזי ועברי' }]} />
+          </div>
         </div>
       </Section>
 

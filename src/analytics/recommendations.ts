@@ -3,6 +3,7 @@ import { addDays, cycleFor, cycleStartDay, loadTransactions, median, recentCycle
 import { summarizeCycle } from './cashflow.js';
 import { savingsCapacity } from './planning.js';
 import { bankBalances } from './forecast.js';
+import { insuranceInsights } from './insurance.js';
 
 export interface Recommendation {
   key: string;
@@ -106,6 +107,12 @@ export function buildRecommendations(db: DB, asOf = today()): Recommendation[] {
       monthlySaving: round(monthly * 0.2), annualSaving: round(monthly * 12 * 0.2),
       examples: [...insurers].slice(0, 6).map(m => ({ description: describe(m), amount: 0 })),
     });
+  }
+
+  // 5b. insurance rules: no disability cover with a salary, two home policies, nursing getting dearer, a car unused
+  for (const i of insuranceInsights(db, asOf)) {
+    recs.push({ key: i.key, type: 'insurance', title: i.title, detail: i.detail, monthlySaving: i.monthlySaving,
+      annualSaving: round(i.monthlySaving * 12), examples: i.examples });
   }
 
   // 6. categories trending up vs the last 3 cycles

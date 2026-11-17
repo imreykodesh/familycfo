@@ -16,6 +16,9 @@ export const pct = (n: number | null | undefined) => (n == null ? '—' : `${Mat
 const dayFmt = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'short' });
 const fullFmt = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'short', year: 'numeric' });
 export const day = (d: string | null | undefined) => (d ? dayFmt.format(new Date(`${d.slice(0, 10)}T12:00:00`)) : '—');
+const hebFmt = new Intl.DateTimeFormat('he-u-ca-hebrew', { day: 'numeric', month: 'long' });
+/** The Hebrew date (e.g. "5 בטבת"), for the transactions list when settings.date_display = both */
+export const hebrewDay = (d: string | null | undefined) => (d ? hebFmt.format(new Date(`${d.slice(0, 10)}T12:00:00`)) : '');
 export const fullDate = (d: string | null | undefined) => (d ? fullFmt.format(new Date(`${d.slice(0, 10)}T12:00:00`)) : '—');
 
 const monthFmt = new Intl.DateTimeFormat('he-IL', { month: 'long', year: 'numeric' });

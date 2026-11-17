@@ -97,6 +97,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `allowance.ts` | כמה אפשר להוציא ביום: `computeAllowance` (טהורה), `buildAllowance`, `committedCardAmount` |
 | `hebcal.ts` | לוח עברי בלי ספרייה (Intl): `hebrewParts`, `occurrences`, `nextOccurrence`, `lastOccurrence`, `HEBREW_MONTHS` |
 | `monthClose.ts` | סגירת חודש ודוח: `monthChecks`, `monthCloseState`, `answerCheck` ("הסתיים" מסיים את הפריט הקבוע), `closeMonth` / `reopenMonth`, `monthSignature`, `closeHistory`, `monthReport` |
+| `insurance.ts` | ביטוחים: `insuranceCharges`, `policyMatches`, `monthlyPremium` (משותפים למסך הביטוחים), `insuranceInsights` (תובנות לפי כללים, נכנסות להמלצות) |
 | `reminders.ts` | תזכורות: `listReminders`, `autoReminders` (ביטוח / הלוואה / קרן השתלמות / הוצאה מתוכננת), `fireDueReminders` (כל דקה בשרת וב-pipeline → התראות עם `href`), `occurrence`, `occurrencesAround`, `nowLocal` |
 | `iou.ts` | הלוואות בין אנשים: `listIous` (עם הצעות להחזר ולתנועת ההלוואה), `iouCandidates` (טהורה), `createIou`, `addIouPayment` / `removeIouPayment`, `setSource`, `rejectIouCandidate`, `deleteIou` |
 | `maaser.ts` | מעשרות: `maaserReport` (חודש אחרי חודש: הכנסה, נדרש, ניתן, יתרה מצטברת), `maaserMonth` (טהורה), `maaserConfig` / `parseMaaserConfig` / `saveMaaserConfig`, `donationCategories` |
@@ -164,7 +165,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | נתיב | מסך | פרמטרים ב-URL |
 |---|---|---|
 | `/` | סקירה | |
-| `/transactions` | תנועות | `cycle`, `search`, `category`, `account`, `kind`, `review=1`, `charge` |
+| `/transactions` | תנועות | `cycle`, `search`, `category`, `account`, `kind` (גם כמה, למשל `expense,refund`), `review=1`, `charge`, `fixed=1/0` |
 | `/fixed` | קבועות החודש | `#scheduled`, `#planned` |
 | `/budgets` | תקציב | |
 | `/seasonal` | קופה לאירועים צפויים | |
@@ -196,7 +197,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 |---|---|
 | כללי | `GET meta`, `PUT settings`, `GET/PUT fx`, `GET sync-status` |
 | CRUD | `members`, `accounts` (PATCH), `businesses`, `tags`, `funds`, `assets`, `asset-snapshots`, `liabilities`, `liability-snapshots`, `scheduled` |
-| תנועות | `GET transactions`, `GET transactions/export.csv`, `PATCH transactions/:id`, `POST transactions/bulk`, `GET transactions/:id/similar`, `POST transactions/manual`, `PUT transactions/:id/manual`, `DELETE transactions/:id` |
+| תנועות | `GET transactions` (`fixed=1/0`: רק קבועות / רק משתנות), `GET transactions/export.csv`, `PATCH transactions/:id`, `POST transactions/bulk`, `GET transactions/:id/similar`, `POST transactions/manual`, `PUT transactions/:id/manual`, `DELETE transactions/:id` |
 | כללים וקישורים | `GET/POST rules`, `DELETE rules/:id`, `GET/POST links`, `PATCH links/:id` |
 | מתוכננות | `GET/POST planned`, `PUT/PATCH/DELETE planned/:id`, `POST planned/:id/match` |
 | קופה לאירועים, סכום יומי | `GET/POST seasonal`, `PATCH/DELETE seasonal/:id`, `POST seasonal/:id/settle`, `PUT seasonal/pot`, `GET allowance` (גם בתוך `summary.allowance`) |
@@ -239,6 +240,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrape_time`, `scrape_catch_up` | משיכה יומית בדסקטופ |
 | `notify_scrape`, `notify_alerts` | התראות בדסקטופ |
 | `onboarding_done` | האשף הושלם |
+| `date_display` | `gregorian` / `both`: תאריך עברי ליד הלועזי ברשימת התנועות |
 | `maaser_cfg` | JSON: הגדרות המעשרות (`enabled`, `percent`, `base` net/gross, `grossMonthly`, `donationCategoryIds`, `excludeCategoryIds`, `excludePatterns`, `startMonth`, `openingBalance`). נכתב רק דרך `PUT /api/maaser/config` |
 | `health_ignore` | JSON: מזהה בדיקה ← הנוסח שהמשתמש הסתיר (נכתב רק דרך `PUT /api/health/ignore`) |
 
