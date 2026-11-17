@@ -238,6 +238,30 @@ describe('paybacks', () => {
     expect(summary.income).toBe(0);
     expect(summary.spend).toBe(400);
   });
+
+  it('does not pair unrelated transfers, child allowance or a far-off share', () => {
+    const db = testDb();
+    addAccount(db, 'max:1', 'card');
+    addAccount(db, 'hapoalim:1', 'bank');
+    // money in from one person and out to another on the same day, same amount
+    addTx(db, { account: 'hapoalim:1', date: '2026-08-03', description: 'העברה לנח בנימין ששון', amount: -100, kind: 'expense' });
+    addTx(db, { account: 'hapoalim:1', date: '2026-08-03', description: 'העברה מויספיש אברהם חשבון 12-290-0005-000175526 זמן פלוס', amount: 100, kind: 'income' });
+    // "ביטוח לאומי" isn't Bit
+    addTx(db, { account: 'max:1', date: '2026-08-06', description: 'סופר', amount: -828, kind: 'expense' });
+    addTx(db, { account: 'hapoalim:1', date: '2026-08-19', description: 'ביטוח לאומי - ילדים', amount: 276, kind: 'income' });
+    // a third of a purchase from three weeks earlier
+    addTx(db, { account: 'max:1', date: '2026-07-09', description: 'חנות', amount: -600, kind: 'expense' });
+    addTx(db, { account: 'hapoalim:1', date: '2026-07-30', description: 'העברה מאפרגן חיים', amount: 200, kind: 'income' });
+    expect(findPaybackCandidates(loadTransactions(db), new Set())).toEqual([]);
+  });
+
+  it('pairs money back from the same person it was sent to', () => {
+    const db = testDb();
+    addAccount(db, 'hapoalim:1', 'bank');
+    const out = addTx(db, { account: 'hapoalim:1', date: '2026-08-01', description: 'העברה לכהן דוד', amount: -300, kind: 'expense' });
+    const back = addTx(db, { account: 'hapoalim:1', date: '2026-08-10', description: 'העברה מכהן דוד', amount: 300, kind: 'income' });
+    expect(findPaybackCandidates(loadTransactions(db), new Set())).toMatchObject([{ inflowId: back, expenseId: out, type: 'payback' }]);
+  });
 });
 
 describe('recurring and business share', () => {

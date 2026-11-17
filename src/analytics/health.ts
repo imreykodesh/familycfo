@@ -202,8 +202,11 @@ function waitingChecks(db: DB, asOf: string): HealthItem[] {
   `).all() as { id: number; type: string; amount: number; from_desc: string; from_date: string; to_desc: string; to_date: string; to_amount: number }[];
   const items: HealthItem[] = links.map(l => ({
     id: `link:${l.id}`, kind: 'links', status: 'suggestion',
-    title: `${l.type === 'refund' ? 'זיכוי' : 'החזר'} של ${ils(l.amount)} על ${l.to_desc}?`,
-    detail: `„${l.from_desc}" מ-${dmy(localDate(l.from_date))}, על הוצאה של ${ils(l.to_amount)} מ-${dmy(localDate(l.to_date))}. עד שמאשרים, ההוצאה נספרת במלואה.`,
+    title: l.type === 'refund'
+      ? `האם הזיכוי של ${ils(l.amount)} הוא על הקנייה „${l.to_desc}"?`
+      : `האם ${ils(l.amount)} שנכנסו הם החזר על „${l.to_desc}"?`,
+    detail: `נכנס: „${l.from_desc}", ${ils(l.amount)}, ${dmy(localDate(l.from_date))}. ההוצאה: „${l.to_desc}", ${ils(l.to_amount)}, ${dmy(localDate(l.to_date))}. `
+      + `אם כן, ההוצאה תיספר רק בחלק שנשאר עליכם. אם אלה שני דברים שונים, לחצו „לא קשור".`,
     actions: [
       { label: 'כן, זה החזר', method: 'PATCH', path: `/links/${l.id}`, body: { status: 'confirmed' } },
       { label: 'לא קשור', method: 'PATCH', path: `/links/${l.id}`, body: { status: 'rejected' } },

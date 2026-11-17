@@ -107,7 +107,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `simulatorBase.ts` | הקלט של הסימולטור: `simulatorBase` (ממוצע לכל קטגוריה בחודשים המלאים, יעדי חיסכון, הלוואות עם יתרה, ריבית והחזר; מה חסר ולמה) |
 | `seasonal.ts` | קופה לאירועים צפויים: `seasonalPlan`, `monthlySetAside`, `suggestFromHistory`, `ensureSeasonalPot`, `settleSeasonalEvent`, `COMMON_EVENTS` |
 | `recurring.ts`, `scheduled.ts` | זיהוי קבועות, הצעות לפריטים קבועים |
-| `paybacks.ts` | החזרי ביט / פייבוקס |
+| `paybacks.ts` | הצעות להחזרים (`suggestPaybacks`, `samePerson`): ביט / פייבוקס = אותו סכום או חלק ממנו; העברה בנקאית = אותו סכום בדיוק עד 14 יום; כסף שנשלח לאדם = רק כשאותו אדם מחזיר. לא קבועות, לא מזומן, לא הכנסה קבועה, לא זיכויי כרטיס. הצעות שכבר לא מתאימות נמחקות בכל חישוב |
 | `alerts.ts`, `recommendations.ts` | התראות (`refreshAlerts`, `takeAlertsToNotify`) והמלצות |
 | `networth.ts`, `investments.ts`, `quotes.ts`, `fx.ts` | שווי נקי, תיק השקעות, מחירים מ-Yahoo, שערי בנק ישראל |
 
