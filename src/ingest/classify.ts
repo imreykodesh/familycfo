@@ -1,6 +1,7 @@
 import type { DB } from '../db/connection.js';
 import { categorize } from '../categorizer.js';
 import { merchantKey } from '../analytics/common.js';
+import { SCRAPER_CATEGORY_MAP } from './scraperCategories.js';
 
 // JS `\b` only knows ASCII word characters, so Hebrew words need an explicit end-of-word lookahead
 const WORD_END = `(?=$|[\\s\\-–'"״׳])`;
@@ -105,8 +106,21 @@ export function getOrCreateCategory(db: DB, name: string): number {
 }
 
 /**
+ * The category for a card company's own category name: a category with that name (or an alias left
+ * by a rename / merge) → the default category it means (`SCRAPER_CATEGORY_MAP`) → a new category with
+ * the company's name, so a row the company categorized is never left without one. Merging that new
+ * category into another one later leaves an alias, so the next rows follow the merge.
+ */
+export function scraperCategory(db: DB, sourceCategory: string): number | undefined {
+  const name = sourceCategory.trim();
+  if (!name) return undefined;
+  const mapped = SCRAPER_CATEGORY_MAP[name];
+  return findCategory(db, name) ?? (mapped ? findCategory(db, mapped) : undefined) ?? getOrCreateCategory(db, name);
+}
+
+/**
  * Fill in categories for uncategorized rows: rules → same-description cache → the scraper's
- * own category (when it matches a known category) → the external categorization API.
+ * own category (`scraperCategory`) → the external categorization API.
  */
 export async function categorizeTransactions(db: DB, txIds: number[], apiUrl?: string): Promise<void> {
   applyRules(db, txIds);
@@ -122,12 +136,13 @@ export async function categorizeTransactions(db: DB, txIds: number[], apiUrl?: s
 
   for (const id of txIds) {
     const tx = db.prepare(`SELECT * FROM transactions WHERE id = ?`).get(id) as TxRow | undefined;
-    if (!tx || tx.category_id != null) continue;
+    // a row the user left without a category on purpose stays that way
+    if (!tx || tx.category_id != null || tx.category_source === 'manual') continue;
 
     const cached = cache.get(tx.description, tx.id) as number | undefined;
     if (cached) { set.run(cached, 'cache', tx.id); continue; }
 
-    const fromScraper = tx.source_category ? findCategory(db, tx.source_category) : undefined;
+    const fromScraper = tx.source_category ? scraperCategory(db, tx.source_category) : undefined;
     if (fromScraper) { set.run(fromScraper, 'scraper', tx.id); continue; }
 
     if (!apiUrl) continue;
