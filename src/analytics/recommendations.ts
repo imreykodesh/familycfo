@@ -25,7 +25,9 @@ const SERVICE_GROUPS: { name: string; pattern: RegExp }[] = [
 export function buildRecommendations(db: DB, asOf = today()): Recommendation[] {
   const txs = loadTransactions(db);
   const recs: Recommendation[] = [];
-  const subs = db.prepare(`SELECT * FROM recurring_series WHERE active = 1 AND kind IN ('subscription','bill')`).all() as
+  // a standing-order donation repeats like a subscription, but it's not one to "cancel what you don't use"
+  const subs = db.prepare(`SELECT s.* FROM recurring_series s LEFT JOIN categories c ON c.id = s.category_id
+    WHERE s.active = 1 AND s.kind IN ('subscription','bill') AND COALESCE(c.name, '') NOT LIKE 'תרומ%'`).all() as
     { merchant_key: string; account_id: string; kind: string; typical_amount: number; last_amount: number }[];
   const describe = (merchant: string) => txs.find(t => t.merchant === merchant)?.description ?? merchant;
 

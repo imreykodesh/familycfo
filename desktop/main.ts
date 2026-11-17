@@ -145,7 +145,7 @@ function onServerMessage(child: ChildProcess, msg: ServerMessage): void {
     }
     case 'alerts': {
       const shown = msg.alerts.slice(0, 3);
-      for (const a of shown) notify(a.title, a.message, '/insights', a.severity === 'critical' ? 'critical' : 'normal');
+      for (const a of shown) notify(a.title, a.message, a.href ?? '/insights', a.severity === 'critical' ? 'critical' : 'normal');
       if (msg.alerts.length > shown.length) notify(`ועוד ${msg.alerts.length - shown.length} התראות`, 'פרטים בעמוד התובנות.', '/insights');
       break;
     }

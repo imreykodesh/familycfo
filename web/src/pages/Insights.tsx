@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Alert, type ChargeMove, type Recommendation } from '../api';
 import { day, todayIso } from '../format';
 import {
-  Activity, Ban, Bell, CalendarDays, CloudOff, Copy, CreditCard, Lightbulb, type LucideIcon, PieChart, Receipt, Repeat, RotateCcw, Shuffle, Handshake,
+  Activity, Ban, Bell, CalendarDays, CloudOff, Copy, CreditCard, Lightbulb, type LucideIcon, PieChart, Receipt, Repeat, RotateCcw, Shuffle, Handshake, AlarmClock,
   Sparkles, TrendingUp, TriangleAlert, X,
 } from 'lucide-react';
 import { Empty, ErrorBox, Loading, Money, PageHeader, SectionTitle, SeverityDot } from '../components/ui';
@@ -16,13 +16,13 @@ interface RecurringRow { id: number; merchantKey: string; accountId: string; kin
 const ALERT_TYPES: Record<string, string> = {
   budget: 'תקציב', duplicate: 'חיוב כפול', anomaly: 'חריגה', new_subscription: 'מנוי חדש', price_increase: 'עליית מחיר',
   low_balance: 'יתרה נמוכה', card_vs_balance: 'חיוב כרטיס', fee: 'עמלה', unmatched_card_bill: 'כרטיס לא נסרק',
-  scrape_failed: 'סריקה', big_day: 'יום חריג', cancel_failed: 'ביטול שלא נקלט', move_still_on_old: 'מעבר כרטיס', iou_due: 'הלוואה', iou_payment: 'החזר הלוואה',
+  scrape_failed: 'סריקה', big_day: 'יום חריג', cancel_failed: 'ביטול שלא נקלט', move_still_on_old: 'מעבר כרטיס', iou_due: 'הלוואה', iou_payment: 'החזר הלוואה', reminder: 'תזכורת', reminder_auto: 'תזכורת',
 };
 
 const ALERT_ICONS: Record<string, LucideIcon> = {
   budget: PieChart, duplicate: Copy, anomaly: Activity, new_subscription: Repeat, price_increase: TrendingUp,
   low_balance: TriangleAlert, card_vs_balance: CreditCard, fee: Receipt, unmatched_card_bill: CreditCard,
-  scrape_failed: CloudOff, big_day: CalendarDays, cancel_failed: Ban, move_still_on_old: Shuffle, iou_due: Handshake, iou_payment: Handshake,
+  scrape_failed: CloudOff, big_day: CalendarDays, cancel_failed: Ban, move_still_on_old: Shuffle, iou_due: Handshake, iou_payment: Handshake, reminder: AlarmClock, reminder_auto: AlarmClock,
 };
 const SEVERITY_TILE: Record<string, string> = { critical: 'var(--negative)', warning: 'var(--chart-3)' };
 
@@ -154,6 +154,7 @@ export default function Insights() {
                     </div>
                     <div className="mt-1.5 text-sm font-medium">{a.title}</div>
                     <div className="mt-0.5 text-xs leading-relaxed text-zinc-500">{a.message}</div>
+                    {a.href && <Link className="mt-1 inline-block text-xs text-primary hover:underline" to={a.href}>לטפל בזה ←</Link>}
                   </div>
                   <button className="btn-ghost btn-icon -me-1.5 -mt-1 self-start" title={a.dismissedAt ? 'החזר' : 'סגור'} aria-label={a.dismissedAt ? 'החזר' : 'סגור'}
                     onClick={() => alertAction.mutate({ id: a.id, body: { dismissed: !a.dismissedAt } })}>{a.dismissedAt ? <RotateCcw /> : <X />}</button>

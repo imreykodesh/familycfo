@@ -8,6 +8,9 @@ import { seasonalPlan } from './seasonal.js';
 import { listChargeMoves, sameMerchant } from './chargeMoves.js';
 import { listIous } from './iou.js';
 
+/** 2026-12-08 → 08.12.2026 */
+const dmy = (d: string) => d.slice(0, 10).split('-').reverse().join('.');
+
 export interface AlertDraft {
   type: string;
   severity: 'info' | 'warning' | 'critical';
@@ -16,6 +19,8 @@ export interface AlertDraft {
   message: string;
   txnIds?: number[];
   data?: unknown;
+  /** the screen that deals with it (the Insights card and the desktop notification open it) */
+  href?: string;
 }
 
 const ils = (n: number) => `₪${Math.round(Math.abs(n)).toLocaleString('he-IL')}`;
@@ -145,7 +150,7 @@ export function generateAlerts(db: DB, asOf = today()): AlertDraft[] {
 
   // planned expenses that should have been charged by now but no matching row arrived
   for (const p of listPlanned(db).filter(i => isOverdue(i, asOf))) {
-    drafts.push({ type: 'planned_overdue', severity: 'info', dedupeKey: `planned:${p.id}:${p.date}`,
+    drafts.push({ type: 'planned_overdue', severity: 'info', dedupeKey: `planned:${p.id}:${p.date}`, href: '/fixed#planned',
       title: `עוד לא חויב: ${p.description}`,
       message: `${ils(p.amount)} היה צפוי ב-${p.date}. עדיין רלוונטי? אפשר לדחות או לבטל בעמוד ״קבועות החודש״.` });
   }
@@ -154,13 +159,13 @@ export function generateAlerts(db: DB, asOf = today()): AlertDraft[] {
   const seasonal = seasonalPlan(db, { asOf, withSuggestions: false });
   for (const e of seasonal.events) {
     if (e.pendingSettle) {
-      drafts.push({ type: 'seasonal_settle', severity: 'info', dedupeKey: `seasonal-settle:${e.id}:${e.pendingSettle}`,
+      drafts.push({ type: 'seasonal_settle', severity: 'info', dedupeKey: `seasonal-settle:${e.id}:${e.pendingSettle}`, href: '/seasonal',
         title: `${e.name} עבר — כמה יצא מהקופה?`,
         message: `עדכנו בעמוד ״קופה לאירועים צפויים״ כמה כסף לקחתם מהקופה, כדי שהיתרה בה תהיה נכונה.` });
     }
   }
   for (const e of seasonal.events.filter(e => e.active && !e.covered && e.daysUntil <= 45)) {
-    drafts.push({ type: 'seasonal_short', severity: 'warning', dedupeKey: `seasonal-short:${e.id}:${e.nextDate}`,
+    drafts.push({ type: 'seasonal_short', severity: 'warning', dedupeKey: `seasonal-short:${e.id}:${e.nextDate}`, href: '/seasonal',
       title: `${e.name} בעוד ${e.daysUntil} ימים, והקופה לא מכסה אותו`,
       message: `צפוי ${ils(e.amount)}. בקופה ${ils(seasonal.pot.balance)}, כולל האירועים שלפניו.` });
   }
@@ -169,10 +174,10 @@ export function generateAlerts(db: DB, asOf = today()): AlertDraft[] {
   for (const m of moves.filter(m => m.status === 'failed' && m.evidence)) {
     const e = m.evidence!;
     drafts.push(m.toAccountId
-      ? { type: 'move_still_on_old', severity: 'warning', dedupeKey: `move-old:${m.id}:${e.id}`, txnIds: [e.id],
+      ? { type: 'move_still_on_old', severity: 'warning', dedupeKey: `move-old:${m.id}:${e.id}`, href: '/charge-moves', txnIds: [e.id],
           title: `${m.description} עדיין יורד מ${m.fromName}`,
           message: `סימנתם שהעברתם אותו ל${m.toName}, אבל ב-${e.date} חויבו ${ils(e.amount)} בחשבון הישן. כדאי לבדוק מול בית העסק.` }
-      : { type: 'cancel_failed', severity: 'warning', dedupeKey: `cancel-failed:${m.id}:${e.id}`, txnIds: [e.id],
+      : { type: 'cancel_failed', severity: 'warning', dedupeKey: `cancel-failed:${m.id}:${e.id}`, href: '/charge-moves', txnIds: [e.id],
           title: `${m.description} חויב שוב אחרי הביטול`,
           message: `סימנתם שביטלתם אותו, אבל ב-${e.date} חויבו ${ils(e.amount)} ב${m.fromName}. כדאי לבדוק שהביטול נקלט, ולבקש החזר.` });
   }
@@ -180,14 +185,14 @@ export function generateAlerts(db: DB, asOf = today()): AlertDraft[] {
   // personal loans: past their due date, and a row that looks like a repayment (src/analytics/iou.ts)
   for (const i of listIous(db, asOf, txs)) {
     if (i.overdue) {
-      drafts.push({ type: 'iou_due', severity: 'info', dedupeKey: `iou-due:${i.id}:${i.dueDate}`,
-        title: i.direction === 'owed_to_me' ? `${i.person} היה אמור להחזיר עד ${i.dueDate}` : `הגיע מועד ההחזר ל${i.person} (${i.dueDate})`,
+      drafts.push({ type: 'iou_due', severity: 'info', dedupeKey: `iou-due:${i.id}:${i.dueDate}`, href: '/iou',
+        title: i.direction === 'owed_to_me' ? `${i.person} היה אמור להחזיר עד ${dmy(i.dueDate!)}` : `הגיע מועד ההחזר ל${i.person} (${dmy(i.dueDate!)})`,
         message: `נשארו ${ils(i.remaining)} מתוך ${ils(i.amount)}.` });
     }
     for (const c of i.paymentCandidates) {
-      drafts.push({ type: 'iou_payment', severity: 'info', dedupeKey: `iou-pay:${i.id}:${c.id}`, txnIds: [c.id],
+      drafts.push({ type: 'iou_payment', severity: 'info', dedupeKey: `iou-pay:${i.id}:${c.id}`, href: '/iou', txnIds: [c.id],
         title: i.direction === 'owed_to_me' ? `נראה ש${i.person} החזיר/ה ${ils(c.amount)}` : `נראה שהחזרתם ל${i.person} ${ils(c.amount)}`,
-        message: `„${c.description}" מ-${c.date}. אפשר לאשר במסך „הלוואות בין אנשים".` });
+        message: `„${c.description}" מ-${dmy(c.date)}. אפשר לאשר במסך „הלוואות בין אנשים".` });
     }
   }
 
@@ -217,24 +222,24 @@ export function generateAlerts(db: DB, asOf = today()): AlertDraft[] {
 /** Store new alerts (existing ones keep their seen/dismissed state). Returns the new count. */
 export function refreshAlerts(db: DB, asOf = today()): number {
   const insert = db.prepare(`
-    INSERT OR IGNORE INTO alerts (type, severity, dedupe_key, title, message, txn_ids, data_json)
-    VALUES (@type, @severity, @dedupeKey, @title, @message, @txnIds, @data)
+    INSERT OR IGNORE INTO alerts (type, severity, dedupe_key, title, message, txn_ids, data_json, href)
+    VALUES (@type, @severity, @dedupeKey, @title, @message, @txnIds, @data, @href)
   `);
   let added = 0;
   db.transaction(() => {
     for (const a of generateAlerts(db, asOf)) {
-      added += insert.run({ ...a, txnIds: a.txnIds ? JSON.stringify(a.txnIds) : null, data: a.data ? JSON.stringify(a.data) : null }).changes;
+      added += insert.run({ ...a, txnIds: a.txnIds ? JSON.stringify(a.txnIds) : null, data: a.data ? JSON.stringify(a.data) : null, href: a.href ?? null }).changes;
     }
   })();
   return added;
 }
 
-export interface AlertNotice { id: number; type: string; severity: AlertDraft['severity']; title: string; message: string }
+export interface AlertNotice { id: number; type: string; severity: AlertDraft['severity']; title: string; message: string; href: string | null }
 
 /** Alerts not yet shown as a desktop notification (and not dismissed), marked as shown. */
 export function takeAlertsToNotify(db: DB): AlertNotice[] {
   return db.transaction(() => {
-    const rows = db.prepare(`SELECT id, type, severity, title, message FROM alerts
+    const rows = db.prepare(`SELECT id, type, severity, title, message, href FROM alerts
       WHERE notified_at IS NULL AND dismissed_at IS NULL ORDER BY id`).all() as AlertNotice[];
     db.prepare(`UPDATE alerts SET notified_at = CURRENT_TIMESTAMP WHERE notified_at IS NULL`).run();
     return rows;

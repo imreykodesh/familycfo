@@ -71,6 +71,8 @@ export interface Forecast {
 export interface Alert {
   id: number; type: string; severity: 'info' | 'warning' | 'critical'; title: string; message: string; txnIds: string | null;
   createdAt: string; seenAt: string | null; dismissedAt: string | null;
+  /** the screen that deals with it */
+  href?: string | null;
 }
 export interface SavingsCapacity {
   expectedIncome: number; averageFixed: number; averageDynamic: number; irregularReserve: number; monthsUsed: string[]; monthlyCapacity: number;
@@ -388,3 +390,9 @@ export interface Iou {
   paymentCandidates: IouCandidate[]; sourceCandidates: IouCandidate[];
 }
 export interface IouReport { items: Iou[]; totals: { owedToMe: number; iOwe: number } }
+
+/** GET /reminders (src/analytics/reminders.ts); times are Israel local YYYY-MM-DDTHH:MM */
+export type ReminderRepeat = 'once' | 'monthly' | 'yearly';
+export interface Reminder { id: number; text: string; startAt: string; repeat: ReminderRepeat; href: string | null; nextAt: string | null; lastFiredAt: string | null; doneAt: string | null }
+export interface AutoReminder { key: string; kind: 'insurance' | 'loan' | 'study_fund' | 'planned'; title: string; message: string; href: string; date: string; remindOn: string }
+export interface RemindersReport { reminders: Reminder[]; auto: AutoReminder[]; now: string }

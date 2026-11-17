@@ -70,7 +70,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrapeErrors.ts` | הסבר בעברית לכשל משיכה (`explainScrapeError`) |
 | `demo.ts` | בניית `demo.db` |
 | `db/connection.ts` | `openDb`, `getDb` (פותח ומריץ מיגרציות) |
-| `db/migrations.ts` | מיגרציות ממוספרות (אחרונה: 21). לא לערוך מיגרציה ששוחררה — רק להוסיף בסוף |
+| `db/migrations.ts` | מיגרציות ממוספרות (אחרונה: 22). לא לערוך מיגרציה ששוחררה — רק להוסיף בסוף |
 | `db/migrate.ts` | `runMigrations` |
 | `db/ingestRepo.ts` | שמירת חשבונות ותנועות שנמשכו (`saveScrapedAccount`, `recordScrapeRun`); לא דורס שדות שנערכו ידנית |
 | `db/backup.ts` | גיבוי יומי של המסד (`dailyBackup`), תאריך הגיבוי האחרון (`latestBackup`) |
@@ -97,6 +97,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `allowance.ts` | כמה אפשר להוציא ביום: `computeAllowance` (טהורה), `buildAllowance`, `committedCardAmount` |
 | `hebcal.ts` | לוח עברי בלי ספרייה (Intl): `hebrewParts`, `occurrences`, `nextOccurrence`, `lastOccurrence`, `HEBREW_MONTHS` |
 | `monthClose.ts` | סגירת חודש ודוח: `monthChecks`, `monthCloseState`, `answerCheck` ("הסתיים" מסיים את הפריט הקבוע), `closeMonth` / `reopenMonth`, `monthSignature`, `closeHistory`, `monthReport` |
+| `reminders.ts` | תזכורות: `listReminders`, `autoReminders` (ביטוח / הלוואה / קרן השתלמות / הוצאה מתוכננת), `fireDueReminders` (כל דקה בשרת וב-pipeline → התראות עם `href`), `occurrence`, `occurrencesAround`, `nowLocal` |
 | `iou.ts` | הלוואות בין אנשים: `listIous` (עם הצעות להחזר ולתנועת ההלוואה), `iouCandidates` (טהורה), `createIou`, `addIouPayment` / `removeIouPayment`, `setSource`, `rejectIouCandidate`, `deleteIou` |
 | `maaser.ts` | מעשרות: `maaserReport` (חודש אחרי חודש: הכנסה, נדרש, ניתן, יתרה מצטברת), `maaserMonth` (טהורה), `maaserConfig` / `parseMaaserConfig` / `saveMaaserConfig`, `donationCategories` |
 | `chargeMoves.ts` | מעבר כרטיס וביטול חיובים: `moveCandidates`, `addChargeMoves`, `markChargeMove`, `listChargeMoves`, `verifyChargeMoves` (ב-pipeline אחרי הקבועות), `sameMerchant` |
@@ -113,8 +114,8 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | קובץ | תפקיד |
 |---|---|
 | `app.ts` | `buildApp` (כל הנתיבים) ו-`startServer({ port, webDist })` |
-| `index.ts` | `npm run server`: ה-API בלבד |
-| `desktop.ts` | השרת בתוך אפליקציית הדסקטופ: API + ממשק בנוי, תזמון, גיבוי, התראות; מדבר עם Electron ב-IPC |
+| `index.ts` | `npm run server`: ה-API בלבד (+ בדיקת תזכורות כל דקה) |
+| `desktop.ts` | השרת בתוך אפליקציית הדסקטופ: API + ממשק בנוי, תזמון, גיבוי, התראות, תזכורות (כל דקה, בהתעוררות ובפתיחה); מדבר עם Electron ב-IPC |
 | `desktopProtocol.ts` | סוגי ההודעות בין השרת ל-Electron |
 | `web.ts` | `localOnly` (חסימת Host/Origin זרים), `serveWeb` (הגשת `web/dist` עם CSP) |
 | `crud.ts` | `registerCrud`, `toApi`, `pickColumns` |
@@ -124,7 +125,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrapeJob.ts` | משיכה מהממשק: `startScrape({ from, showBrowser, checkOnly, loginIds })`, `submitOtp` |
 | `scheduler.ts` | משיכה יומית בשעה קבועה (`scrape_time`) |
 | `appEvents.ts` | אירועים לאפליקציית הדסקטופ (`emitAppEvent`) |
-| `routes/*.ts` | transactions, analytics, categories, events, insurance, pension, investments, reports (העלאת דוח וייבוא JSON), seasonal (קופה לאירועים + `allowance`), monthClose (סגירת חודש ודוח), simulator (קלט לסימולטור והשוואת החזר חובות), health (בדיקת תקינות), chargeMoves (מעבר כרטיס וביטולים), maaser (מעשרות), iou (הלוואות בין אנשים) |
+| `routes/*.ts` | transactions, analytics, categories, events, insurance, pension, investments, reports (העלאת דוח וייבוא JSON), seasonal (קופה לאירועים + `allowance`), monthClose (סגירת חודש ודוח), simulator (קלט לסימולטור והשוואת החזר חובות), health (בדיקת תקינות), chargeMoves (מעבר כרטיס וביטולים), maaser (מעשרות), iou (הלוואות בין אנשים), reminders (תזכורות) |
 
 ### `desktop/` — Electron
 | קובץ | תפקיד |
@@ -169,6 +170,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `/seasonal` | קופה לאירועים צפויים | |
 | `/maaser` | מעשרות (שורה בסקירה כשמופעל) | |
 | `/iou` | הלוואות בין אנשים (מי חייב למי) | |
+| `/reminders` | תזכורות ידניות ואוטומטיות | |
 | `/month-close` | סגירת חודש ודוח חודשי (להדפסה) | `cycle` |
 | `/simulator` | סימולטור: קיצוץ לפי קטגוריה, כדור שלג מול מפולת (לא נשמר כלום) | |
 | `/health` | בדיקת תקינות (מספר אדום בתפריט = בעיות פתוחות) | |
@@ -199,6 +201,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | מתוכננות | `GET/POST planned`, `PUT/PATCH/DELETE planned/:id`, `POST planned/:id/match` |
 | קופה לאירועים, סכום יומי | `GET/POST seasonal`, `PATCH/DELETE seasonal/:id`, `POST seasonal/:id/settle`, `PUT seasonal/pot`, `GET allowance` (גם בתוך `summary.allowance`) |
 | סגירת חודש | `GET month-close?cycle=`, `PUT month-close/:cycle/checks` `{checkId, answer}`, `POST/DELETE month-close/:cycle`, `GET month-report?cycle=` |
+| תזכורות | `GET/POST reminders` `{text, at: YYYY-MM-DDTHH:MM, repeat: once/monthly/yearly, href?}`, `PATCH/DELETE reminders/:id` (`done`) |
 | הלוואות בין אנשים | `GET/POST iou`, `PATCH/DELETE iou/:id` (`done`), `POST iou/:id/payments` `{txnId}` או `{date, amount}`, `DELETE iou/:id/payments/:pid`, `PUT iou/:id/source` `{txnId}`, `POST iou/:id/reject` `{txnId}` |
 | מעשרות | `GET maaser`, `PUT maaser/config` (שדות `MaaserConfig`) |
 | מעבר כרטיס וביטולים | `GET charge-moves`, `GET charge-moves/candidates?from=`, `POST charge-moves` `{fromAccountId, toAccountId (null = ביטול), seriesIds, marked?}`, `PATCH charge-moves/:id` `{status: moved/todo, notes?}`, `DELETE charge-moves/:id` |
@@ -219,10 +222,10 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 טבלאות: `accounts`, `transactions`, `transaction_tags`, `transaction_links`, `categories`, `category_aliases`, `category_rules`,
 `members`, `businesses`, `tags`, `budgets`, `balances`, `fx_rates`, `recurring_series`, `scheduled_items`, `planned_items`,
 `sinking_funds` (`kind`: general / seasonal), `seasonal_events`, `assets`, `asset_snapshots`, `asset_deposits`, `pension_reports`, `liabilities`, `liability_snapshots`,
-`insurance_policies`, `insurance_documents`, `holdings`, `quotes`, `quote_history`, `alerts`, `recommendation_states`,
-`month_closes` (חודש שנסגר: צילום מצב + חתימה), `month_close_checks` (התשובות לבדיקות), `charge_moves` (חיוב קבוע שמועבר או מבוטל: todo / moved / verified / failed), `iou`, `iou_payments` (הלוואות בין אנשים והחזרים), `scrape_runs`, `settings`, `schema_version`.
+`insurance_policies`, `insurance_documents`, `holdings`, `quotes`, `quote_history`, `alerts` (`href`: המסך שמטפל בהתראה; ההתראה בדסקטופ פותחת אותו), `recommendation_states`,
+`month_closes` (חודש שנסגר: צילום מצב + חתימה), `month_close_checks` (התשובות לבדיקות), `charge_moves` (חיוב קבוע שמועבר או מבוטל: todo / moved / verified / failed), `iou`, `iou_payments` (הלוואות בין אנשים והחזרים), `reminders`, `scrape_runs`, `settings`, `schema_version`.
 
-שינוי סכמה = מיגרציה חדשה בסוף `src/db/migrations.ts` (הבאה: 22) + עדכון הרשימה הזו.
+שינוי סכמה = מיגרציה חדשה בסוף `src/db/migrations.ts` (הבאה: 23) + עדכון הרשימה הזו.
 
 ### מפתחות `settings`
 | מפתח | משמעות |

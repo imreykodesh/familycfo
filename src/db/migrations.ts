@@ -758,6 +758,25 @@ export const migrations: Migration[] = [
       )`);
     },
   },
+  {
+    version: 22,
+    name: 'reminders, and a screen to open from an alert',
+    up(db) {
+      // times are Israel local time, YYYY-MM-DDTHH:MM. The next time is computed from start_at (so a monthly reminder
+      // on the 31st stays on the month's last day); last_fired_at = the occurrence that already became an alert.
+      db.exec(`CREATE TABLE reminders (
+        id INTEGER PRIMARY KEY,
+        text TEXT NOT NULL,
+        start_at TEXT NOT NULL,
+        repeat TEXT NOT NULL DEFAULT 'once' CHECK (repeat IN ('once','monthly','yearly')),
+        href TEXT,                            -- a screen to open (optional)
+        last_fired_at TEXT,
+        done_at TEXT,                         -- stopped (a one-time reminder that fired, or ticked off)
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`);
+      db.exec(`ALTER TABLE alerts ADD COLUMN href TEXT`);
+    },
+  },
 ];
 
 type CategoryKind = 'expense' | 'income' | 'transfer' | 'card_payment' | 'savings';
