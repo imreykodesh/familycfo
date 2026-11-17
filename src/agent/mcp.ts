@@ -36,7 +36,7 @@ const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
 db.pragma('query_only = ON');
 
 // GET endpoints the agent may read (all are read-only)
-const API_PATHS = /^\/(summary|income|cashflow|forecast|coverage|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|transactions\/\d+\/similar|planned|rules|links|categories|meta|events(\/\d+(\/candidates)?)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled|sync-status|scrape\/runs|logs|insurance|pension|investments|balance-history|history-range|allowance|seasonal)$/;
+const API_PATHS = /^\/(summary|income|cashflow|forecast|coverage|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|transactions\/\d+\/similar|planned|rules|links|categories|meta|events(\/\d+(\/candidates)?)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled|sync-status|scrape\/runs|logs|insurance|pension|investments|balance-history|history-range|allowance|seasonal|month-close|month-report)$/;
 
 // endpoints the agent may change (the method is checked by the API's own routes)
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -47,6 +47,7 @@ const WRITE_PATHS = new RegExp('^/(' + [
   'planned(/\\d+(/match)?)?',
   'events/\\d+/transactions',
   'seasonal(/\\d+(/settle)?|/pot)?',
+  'month-close/\\d{4}-\\d{2}(/checks)?',
   'insurance(/\\d+)?', 'insurance/documents/\\d+', 'pension/import',
   'investments/refresh', 'investments/holdings(/\\d+)?',
   '(members|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled)(/\\d+)?',
@@ -71,6 +72,9 @@ negativeSince = when the current overdraft started; rebuilt from the rows back f
 /allowance (how much can be spent per day until the end of the planning period without dropping below the buffer: perDay, bindingDate,
 the usual pace, known income / payments left, the expected-events set-aside), /seasonal (the expected-events fund: holidays by the
 Hebrew calendar and other yearly events, next dates, the pot, how much to put aside per month, events waiting for "how much did it take").
+/month-close?cycle=YYYY-MM (closing a month: checks — accounts with rows to the end, duplicates, uncategorized, fixed items that didn't
+show up, waiting links / planned; closed or not), /month-report?cycle=YYYY-MM (the month vs the average, top categories, over budget,
+ended fixed items, debts, top recommendations). Default: the last month that ended.
 /sync-status (each bank's last scrape: result, failures in a row, explanation), /scrape/runs?company=&failed=1&limit=N (scrape history with
 the error, the bank page's text when it failed, and an explanation), /logs?level=error|warn&days=N&search=TEXT (the app's log lines).
 Common filters on most: member=ID, business=ID, tags=ID,ID.`,

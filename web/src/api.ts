@@ -318,3 +318,20 @@ export interface Portfolio {
 }
 export interface SymbolMatch { symbol: string; name: string; exchange: string | null; type: string | null }
 export interface LiveQuote { symbol: string; name: string | null; currency: string; price: number; previousClose: number | null; exchange: string | null }
+
+/** GET /month-close: the checks of a month that ended, and which of the last 12 are closed (src/analytics/monthClose.ts) */
+export interface MonthCheck {
+  id: string; kind: 'account' | 'duplicates' | 'uncategorized' | 'fixed' | 'links' | 'planned'; status: 'ok' | 'warn' | 'ask';
+  title: string; detail?: string; href?: string; approved?: boolean; answer?: 'ended' | 'later' | 'other' | null; amount?: number;
+}
+export interface MonthCloseState { cycle: Cycle; open: boolean; checks: MonthCheck[]; todo: number; closed: { at: string; changed: boolean } | null }
+export interface MonthCloseResponse { history: (Cycle & { closed: boolean })[]; state: MonthCloseState }
+export interface MonthReport {
+  cycle: Cycle; income: number; spend: number; fixed: number; dynamic: number; net: number; savingsDeposits: number;
+  average: { income: number; spend: number; net: number; months: number };
+  categories: { categoryId: number | null; name: string; spend: number; average: number; delta: number }[];
+  overBudget: { categoryId: number; name: string; budget: number; spent: number }[];
+  ended: { name: string; amount: number }[]; freedMonthly: number; debts: { total: number; monthly: number };
+  recommendations: { title: string; detail: string; monthlySaving: number }[];
+  closed: MonthCloseState['closed']; todo: number;
+}

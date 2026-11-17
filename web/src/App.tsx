@@ -3,7 +3,7 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-route
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import {
-  ArrowLeftRight, ChartColumn, Bell, Briefcase, CalendarCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
+  ArrowLeftRight, ChartColumn, Bell, Briefcase, CalendarCheck, ClipboardCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
   ChartCandlestick, ScrollText, Settings2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
 } from 'lucide-react';
 import { api, type Alert } from './api';
@@ -26,6 +26,7 @@ import Pension from './pages/Pension';
 import Investments from './pages/Investments';
 import Logs from './pages/Logs';
 import Seasonal from './pages/Seasonal';
+import MonthClose from './pages/MonthClose';
 import { Picker, Segmented } from './components/ui';
 import { AgentChat } from './components/AgentChat';
 import { desktop, useDesktopNavigation } from './desktop';
@@ -41,6 +42,7 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/fixed', label: 'קבועות החודש', icon: CalendarCheck },
   { to: '/budgets', label: 'תקציב', icon: PieChart },
   { to: '/seasonal', label: 'קופה לאירועים צפויים', icon: Gift },
+  { to: '/month-close', label: 'סגירת חודש ודוח', icon: ClipboardCheck },
   { to: '/trends', label: 'מגמות הוצאות', icon: ChartColumn },
   { to: '/cashflow', label: 'תזרים ותחזית', icon: TrendingUp },
   { to: '/insights', label: 'תובנות והתראות', icon: Lightbulb },
@@ -173,7 +175,7 @@ export default function App() {
       <aside ref={drawer} id="app-nav" aria-label="ניווט ראשי"
         role={drawerMode ? 'dialog' : undefined} aria-modal={drawerMode && navOpen ? true : undefined}
         inert={drawerMode && !navOpen}
-        className={cn('fixed inset-y-0 start-0 z-50 flex w-[min(18rem,86vw)] flex-col bg-sidebar text-sidebar-foreground',
+        className={cn('print:hidden fixed inset-y-0 start-0 z-50 flex w-[min(18rem,86vw)] flex-col bg-sidebar text-sidebar-foreground',
           'max-md:transition-[translate,box-shadow] max-md:duration-(--duration-slow) max-md:ease-(--ease-out) motion-transform',
           navOpen ? 'translate-x-0 shadow-(--shadow-overlay)' : 'translate-x-full',
           'md:sticky md:top-0 md:z-auto md:h-dvh md:w-(--rail-w) md:shrink-0 md:translate-x-0 lg:w-(--sidebar-w)')}>
@@ -236,7 +238,7 @@ export default function App() {
       </aside>
 
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 border-b bg-background/75 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+        <header className="print:hidden sticky top-0 z-30 border-b bg-background/75 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
           <div className="flex min-h-(--header-h) items-center gap-2 px-3 py-2.5 sm:px-6 lg:px-8">
             <button ref={menuButton} type="button" className="btn-ghost btn-icon -ms-1 text-fg md:hidden" aria-label="פתח תפריט"
               aria-expanded={navOpen} aria-controls="app-nav" onClick={() => setNavOpen(true)}>
@@ -266,6 +268,7 @@ export default function App() {
               <Route path="/fixed" element={<Fixed />} />
               <Route path="/budgets" element={<Budgets />} />
               <Route path="/seasonal" element={<Seasonal />} />
+              <Route path="/month-close" element={<MonthClose />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/insurance" element={<Insurance />} />
               <Route path="/pension" element={<Pension />} />

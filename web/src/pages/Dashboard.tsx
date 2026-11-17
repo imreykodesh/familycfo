@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, CreditCard, Gauge as GaugeIcon, Gift, Landmark, LayoutDashboard, PiggyBank, Receipt, Sparkles, TriangleAlert, Users, Wallet } from 'lucide-react';
-import { api, qs, type CycleSummary, type DailyAllowance, type InstallmentPlan, type Summary } from '../api';
+import { api, qs, type CycleSummary, type DailyAllowance, type InstallmentPlan, type MonthCloseResponse, type Summary } from '../api';
 import { useFilters, useLookups } from '../state';
 import { day, monthName } from '../format';
 import { ErrorBox, Loading, MemberBadge, Money, MoreLink, PageHeader, Progress, SectionTitle, SeverityDot, Stat } from '../components/ui';
@@ -20,6 +20,7 @@ export default function Dashboard() {
   const installments = useQuery({ queryKey: ['installments', params], queryFn: () => api.get<InstallmentPlan[]>(`/installments${qs(params)}`) });
   const history = useQuery({ queryKey: ['cashflow', params], queryFn: () => api.get<CycleSummary[]>(`/cashflow${qs({ ...params, cycles: 7 })}`) });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const monthClose = useQuery({ queryKey: ['month-close', undefined], queryFn: () => api.get<MonthCloseResponse>('/month-close') });
 
   if (isLoading) return <Loading />;
   if (error || !data) return <ErrorBox error={error} />;
@@ -72,6 +73,13 @@ export default function Dashboard() {
             spark={hist.length > 1 ? hist.map(h => h.net) : undefined} hint={`בממוצע ${capacity.monthsUsed.length} החודשים האחרונים ההוצאות גבוהות מההכנסה`} />
         )}
       </div>
+
+      {monthClose.data && !monthClose.data.state.closed && (
+        <Link to="/month-close" className="card mt-4 flex items-center justify-between gap-3 py-3 text-sm transition-colors hover:bg-accent/40">
+          <span><b>{monthName(monthClose.data.state.cycle.key)} נגמר.</b> {monthClose.data.state.todo ? `${monthClose.data.state.todo === 1 ? 'דבר אחד' : `${monthClose.data.state.todo} דברים`} לבדוק לפני הסגירה, ` : ''}והדוח החודשי מוכן.</span>
+          <span className="shrink-0 text-primary">לסגירה ולדוח ←</span>
+        </Link>
+      )}
 
       <AllowanceCard a={data.allowance} />
 
