@@ -146,6 +146,12 @@ function seedDemo(db: DB): void {
     .run(addDays(now, -200)).lastInsertRowid);
   db.prepare(`INSERT INTO iou_payments (iou_id, date, amount) VALUES (?, ?, 5000)`).run(parents, addDays(now, -60));
 
+  // reminders (/reminders): a monthly one, and a car insurance renewing in 3 weeks (an automatic reminder)
+  db.prepare(`INSERT INTO reminders (text, start_at, repeat, href) VALUES ('לשלם לוועד הבית', ?, 'monthly', '/fixed')`).run(`${addDays(now, 5)}T08:00`);
+  db.prepare(`INSERT INTO reminders (text, start_at) VALUES ('לחדש את רישיון הרכב', ?)`).run(`${addDays(now, 40)}T09:00`);
+  db.prepare(`INSERT INTO insurance_policies (name, type, insurer, premium, premium_frequency, start_date, end_date)
+    VALUES ('ביטוח רכב מקיף', 'car', 'הראל', 3400, 'yearly', ?, ?)`).run(addDays(now, -344), addDays(now, 21));
+
   // moving card A's subscriptions to card B (/charge-moves): a list waiting to be ticked
   const move = db.prepare(`INSERT INTO charge_moves (merchant_key, description, from_account_id, to_account_id, amount, day_of_month)
     VALUES (?, ?, ?, ?, ?, 3)`);

@@ -9,6 +9,7 @@ import { refreshBoiRates } from './analytics/fx.js';
 import { refreshHistory, refreshQuotes } from './analytics/quotes.js';
 import { matchPlanned } from './analytics/planned.js';
 import { verifyChargeMoves } from './analytics/chargeMoves.js';
+import { fireDueReminders } from './analytics/reminders.js';
 
 export interface PipelineOptions {
   /** rows to categorize; defaults to every uncategorized row */
@@ -38,7 +39,7 @@ export async function runPipeline(db: DB = getDb(), opts: PipelineOptions = {}):
   const moves = verifyChargeMoves(db);
   const scheduled = suggestScheduledItems(db);
   const paybacks = suggestPaybacks(db);
-  const alerts = refreshAlerts(db);
+  const alerts = refreshAlerts(db) + fireDueReminders(db);
   return { categorized: ids.length, cardBillsKept: cardBills.kept, cardBillsDemoted: cardBills.demoted, immediateDebits: debits.matched, debitCards: debits.debitCards.length, transfers, plannedMatched: planned.matched, plannedAmbiguous: planned.ambiguous, recurring, movesVerified: moves.verified, movesFailed: moves.failed, scheduled, paybacks, alerts };
 }
 

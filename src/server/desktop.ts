@@ -10,6 +10,7 @@ import { importHousehold } from '../db/importData.js';
 import { dailyBackup } from '../db/backup.js';
 import { getDb } from '../db/connection.js';
 import { takeAlertsToNotify } from '../analytics/alerts.js';
+import { fireDueReminders } from '../analytics/reminders.js';
 import { startServer } from './app.js';
 import { startScrape } from './scrapeJob.js';
 import { startScheduler } from './scheduler.js';
@@ -45,6 +46,8 @@ async function main(): Promise<void> {
     const alerts = takeAlertsToNotify(db);
     if (alerts.length && enabled('notify_alerts')) send({ type: 'alerts', alerts });
   };
+  // reminders have a time of day: checked every minute (below), on wake and at start, and notified at once
+  const reminders = () => { try { if (fireDueReminders(db)) sendAlerts(); } catch (err) { console.error('reminders failed:', err); } };
 
   const scheduler = startScheduler(db, () => startScrape(db));
   onAppEvent(event => {
@@ -68,6 +71,7 @@ async function main(): Promise<void> {
       startScrape(db).catch(err => console.error('scrape not started:', (err as Error).message));
     } else if (msg.type === 'wake') {
       scheduler.runIfMissed();
+      reminders();
     } else if (msg.type === 'shutdown') {
       shutdown();
     }
@@ -78,6 +82,7 @@ async function main(): Promise<void> {
   setInterval(backup, 6 * 3600_000).unref();
   // alerts also come from edits and "recalculate" in the app, not only from scrapes
   setInterval(sendAlerts, 10 * 60_000).unref();
+  setInterval(reminders, 60_000).unref();
 
   const shutdown = () => {
     scheduler.stop();
@@ -90,6 +95,7 @@ async function main(): Promise<void> {
 
   send({ type: 'ready', port, imported });
   scheduler.runIfMissed();
+  reminders();
 }
 
 main().catch(err => {

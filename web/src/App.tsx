@@ -3,7 +3,7 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-route
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import {
-  ArrowLeftRight, ChartColumn, Bell, Briefcase, Calculator, CalendarCheck, HandHeart, Handshake, HeartPulse, Shuffle, ClipboardCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
+  ArrowLeftRight, ChartColumn, Bell, Briefcase, Calculator, CalendarCheck, AlarmClock, HandHeart, Handshake, HeartPulse, Shuffle, ClipboardCheck, Gift, Home, Layers, LayoutDashboard, Lightbulb, Menu, PieChart,
   ChartCandlestick, ScrollText, Settings2, ShieldCheck, Tags, TrendingUp, Umbrella, Wallet, X, type LucideIcon,
 } from 'lucide-react';
 import { api, type Alert, type HealthReport } from './api';
@@ -32,6 +32,7 @@ import Health from './pages/Health';
 import ChargeMoves from './pages/ChargeMoves';
 import Maaser from './pages/Maaser';
 import IouPage from './pages/Iou';
+import Reminders from './pages/Reminders';
 import { Picker, Segmented } from './components/ui';
 import { AgentChat } from './components/AgentChat';
 import { desktop, useDesktopNavigation } from './desktop';
@@ -54,6 +55,7 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/trends', label: 'מגמות הוצאות', icon: ChartColumn },
   { to: '/cashflow', label: 'תזרים ותחזית', icon: TrendingUp },
   { to: '/insights', label: 'תובנות והתראות', icon: Lightbulb },
+  { to: '/reminders', label: 'תזכורות', icon: AlarmClock },
   { to: '/charge-moves', label: 'מעבר כרטיס וביטולים', icon: Shuffle },
   { to: '/events', label: 'אירועים ותגיות', icon: Tags },
   { to: '/businesses', label: 'עסקים', icon: Briefcase },
@@ -287,6 +289,7 @@ export default function App() {
               <Route path="/charge-moves" element={<ChargeMoves />} />
               <Route path="/maaser" element={<Maaser />} />
               <Route path="/iou" element={<IouPage />} />
+              <Route path="/reminders" element={<Reminders />} />
               <Route path="/trends" element={<Trends />} />
               <Route path="/insurance" element={<Insurance />} />
               <Route path="/pension" element={<Pension />} />
