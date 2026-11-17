@@ -34,7 +34,8 @@ export function savingsCapacity(db: DB, filter: TxFilter = {}, asOf = today()): 
 
   // may be negative: spending more than the income leaves nothing to put aside (shown as a shortfall)
   const capacity = round(income - baseline.fixed - dynamic - irregularReserve);
-  const funds = db.prepare(`SELECT id, name, monthly_target FROM sinking_funds ORDER BY id`).all() as { id: number; name: string; monthly_target: number }[];
+  // the expected-events pot has its own set-aside (seasonal.ts), taken off the daily allowance instead
+  const funds = db.prepare(`SELECT id, name, monthly_target FROM sinking_funds WHERE kind != 'seasonal' ORDER BY id`).all() as { id: number; name: string; monthly_target: number }[];
   const targetsTotal = funds.reduce((s, f) => s + f.monthly_target, 0);
   const defaultSplit = [0.5, 0.3, 0.2];
   const allocation = funds.map((f, i) => ({

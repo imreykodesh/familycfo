@@ -36,7 +36,7 @@ const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
 db.pragma('query_only = ON');
 
 // GET endpoints the agent may read (all are read-only)
-const API_PATHS = /^\/(summary|income|cashflow|forecast|coverage|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|transactions\/\d+\/similar|planned|rules|links|categories|meta|events(\/\d+(\/candidates)?)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled|sync-status|scrape\/runs|logs|insurance|pension|investments|balance-history|history-range)$/;
+const API_PATHS = /^\/(summary|income|cashflow|forecast|coverage|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|transactions\/\d+\/similar|planned|rules|links|categories|meta|events(\/\d+(\/candidates)?)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled|sync-status|scrape\/runs|logs|insurance|pension|investments|balance-history|history-range|allowance|seasonal)$/;
 
 // endpoints the agent may change (the method is checked by the API's own routes)
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -46,6 +46,7 @@ const WRITE_PATHS = new RegExp('^/(' + [
   'transactions/(\\d+|bulk|manual|\\d+/manual)', 'rules(/\\d+)?', 'links(/\\d+)?',
   'planned(/\\d+(/match)?)?',
   'events/\\d+/transactions',
+  'seasonal(/\\d+(/settle)?|/pot)?',
   'insurance(/\\d+)?', 'insurance/documents/\\d+', 'pension/import',
   'investments/refresh', 'investments/holdings(/\\d+)?',
   '(members|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled)(/\\d+)?',
@@ -67,6 +68,9 @@ negativeSince = when the current overdraft started; rebuilt from the rows back f
 /insurance (policies, their documents with a path to open with Read, actual payments, insurance charges with no policy),
 /pension (pension / study / provident funds: value, fees, tracks + returns, deposits, expected pension; the latest report's totals),
 /investments (stock-market holdings: live price, value in ILS, gain vs buy price / baseline, today's change, value history).
+/allowance (how much can be spent per day until the end of the planning period without dropping below the buffer: perDay, bindingDate,
+the usual pace, known income / payments left, the expected-events set-aside), /seasonal (the expected-events fund: holidays by the
+Hebrew calendar and other yearly events, next dates, the pot, how much to put aside per month, events waiting for "how much did it take").
 /sync-status (each bank's last scrape: result, failures in a row, explanation), /scrape/runs?company=&failed=1&limit=N (scrape history with
 the error, the bank page's text when it failed, and an explanation), /logs?level=error|warn&days=N&search=TEXT (the app's log lines).
 Common filters on most: member=ID, business=ID, tags=ID,ID.`,

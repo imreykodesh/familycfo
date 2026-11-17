@@ -54,6 +54,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `.gitattributes` | `*.cmd` נשמרים עם CRLF |
 | `accounts.example.json` | דוגמה ל-`accounts.json` (פרטי כניסה לבנקים, מחוץ לגיט) |
 | `.kiro/steering/`, `.cursor/rules` | כללי עבודה לסוכני AI |
+| `docs/plans/` | מסמכי תכנון (`budget-helpers.md`: כלי ניהול ועזרה פיננסית — שלבים, חישובים, API) |
 
 ### `src/` — שרת, משיכה, ניתוח
 | קובץ | תפקיד |
@@ -69,7 +70,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrapeErrors.ts` | הסבר בעברית לכשל משיכה (`explainScrapeError`) |
 | `demo.ts` | בניית `demo.db` |
 | `db/connection.ts` | `openDb`, `getDb` (פותח ומריץ מיגרציות) |
-| `db/migrations.ts` | מיגרציות ממוספרות (אחרונה: 17). לא לערוך מיגרציה ששוחררה — רק להוסיף בסוף |
+| `db/migrations.ts` | מיגרציות ממוספרות (אחרונה: 18). לא לערוך מיגרציה ששוחררה — רק להוסיף בסוף |
 | `db/migrate.ts` | `runMigrations` |
 | `db/ingestRepo.ts` | שמירת חשבונות ותנועות שנמשכו (`saveScrapedAccount`, `recordScrapeRun`); לא דורס שדות שנערכו ידנית |
 | `db/backup.ts` | גיבוי יומי של המסד (`dailyBackup`) |
@@ -92,7 +93,10 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `cards.ts` | `upcomingCardCharges`, `installmentPlans`, `cardCommitments` |
 | `commitments.ts` | `monthPlan` |
 | `planned.ts` | הוצאות מתוכננות: `listPlanned`, `matchPlanned`, `plannedSpend` |
-| `planning.ts` | `savingsCapacity`, `tightMonthPlan` |
+| `planning.ts` | `savingsCapacity` (בלי הקופה לאירועים), `tightMonthPlan` |
+| `allowance.ts` | כמה אפשר להוציא ביום: `computeAllowance` (טהורה), `buildAllowance`, `committedCardAmount` |
+| `hebcal.ts` | לוח עברי בלי ספרייה (Intl): `hebrewParts`, `occurrences`, `nextOccurrence`, `lastOccurrence`, `HEBREW_MONTHS` |
+| `seasonal.ts` | קופה לאירועים צפויים: `seasonalPlan`, `monthlySetAside`, `suggestFromHistory`, `ensureSeasonalPot`, `settleSeasonalEvent`, `COMMON_EVENTS` |
 | `recurring.ts`, `scheduled.ts` | זיהוי קבועות, הצעות לפריטים קבועים |
 | `paybacks.ts` | החזרי ביט / פייבוקס |
 | `alerts.ts`, `recommendations.ts` | התראות (`refreshAlerts`, `takeAlertsToNotify`) והמלצות |
@@ -113,7 +117,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrapeJob.ts` | משיכה מהממשק: `startScrape({ from, showBrowser, checkOnly, loginIds })`, `submitOtp` |
 | `scheduler.ts` | משיכה יומית בשעה קבועה (`scrape_time`) |
 | `appEvents.ts` | אירועים לאפליקציית הדסקטופ (`emitAppEvent`) |
-| `routes/*.ts` | transactions, analytics, categories, events, insurance, pension, investments, reports (העלאת דוח וייבוא JSON) |
+| `routes/*.ts` | transactions, analytics, categories, events, insurance, pension, investments, reports (העלאת דוח וייבוא JSON), seasonal (קופה לאירועים + `allowance`) |
 
 ### `desktop/` — Electron
 | קובץ | תפקיד |
@@ -155,6 +159,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `/transactions` | תנועות | `cycle`, `search`, `category`, `account`, `kind`, `review=1`, `charge` |
 | `/fixed` | קבועות החודש | `#scheduled` |
 | `/budgets` | תקציב | |
+| `/seasonal` | קופה לאירועים צפויים | |
 | `/trends` | מגמות הוצאות (6 / 12 / 24 / מקסימום) | `parent`, `leaf` |
 | `/cashflow` | תזרים ותחזית | |
 | `/insights` | תובנות והתראות | |
@@ -179,6 +184,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | תנועות | `GET transactions`, `GET transactions/export.csv`, `PATCH transactions/:id`, `POST transactions/bulk`, `GET transactions/:id/similar`, `POST transactions/manual`, `PUT transactions/:id/manual`, `DELETE transactions/:id` |
 | כללים וקישורים | `GET/POST rules`, `DELETE rules/:id`, `GET/POST links`, `PATCH links/:id` |
 | מתוכננות | `GET/POST planned`, `PUT/PATCH/DELETE planned/:id`, `POST planned/:id/match` |
+| קופה לאירועים, סכום יומי | `GET/POST seasonal`, `PATCH/DELETE seasonal/:id`, `POST seasonal/:id/settle`, `PUT seasonal/pot`, `GET allowance` (גם בתוך `summary.allowance`) |
 | ניתוח | `summary`, `income`, `cashflow` (`cycles=N` / `max`), `cashflow/export.csv`, `forecast`, `cards/upcoming`, `month-plan`, `installments`, `recurring`, `budgets` (+`PUT`), `planning`, `alerts` (+`PATCH :id`), `recommendations` (+`POST state`), `networth`, `balance-history`, `coverage` (לכל חשבון), `history-range` (לכל חברה) |
 | קטגוריות ואירועים | `GET/POST categories`, `PATCH/DELETE categories/:id`, `events`, `events/:id`, `events/:id/candidates`, `POST events/:id/transactions` |
 | עסקים | `businesses/:id/report`, `businesses/:id/export.csv` |
@@ -193,11 +199,11 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 
 טבלאות: `accounts`, `transactions`, `transaction_tags`, `transaction_links`, `categories`, `category_aliases`, `category_rules`,
 `members`, `businesses`, `tags`, `budgets`, `balances`, `fx_rates`, `recurring_series`, `scheduled_items`, `planned_items`,
-`sinking_funds`, `assets`, `asset_snapshots`, `asset_deposits`, `pension_reports`, `liabilities`, `liability_snapshots`,
+`sinking_funds` (`kind`: general / seasonal), `seasonal_events`, `assets`, `asset_snapshots`, `asset_deposits`, `pension_reports`, `liabilities`, `liability_snapshots`,
 `insurance_policies`, `insurance_documents`, `holdings`, `quotes`, `quote_history`, `alerts`, `recommendation_states`,
 `month_closes`, `scrape_runs`, `settings`, `schema_version`.
 
-שינוי סכמה = מיגרציה חדשה בסוף `src/db/migrations.ts` (הבאה: 18) + עדכון הרשימה הזו.
+שינוי סכמה = מיגרציה חדשה בסוף `src/db/migrations.ts` (הבאה: 19) + עדכון הרשימה הזו.
 
 ### מפתחות `settings`
 | מפתח | משמעות |

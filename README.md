@@ -43,10 +43,11 @@ a live stock portfolio, and an optional AI chat that answers questions about you
 
 | Page | What you get |
 |---|---|
-| **סקירה** (Overview) | Bank balances now, the expected balance at the end of the month and its lowest point, this month's spend vs. your average, card charges still to come, budget status, alerts. A **scrape button** that runs the bank scrape from the browser — including entering an SMS / OTP code when the bank asks. |
+| **סקירה** (Overview) | **How much you can spend a day** until the end of the month without dropping below your buffer (only known income and payments count; the expected-events set-aside is taken off), vs. your usual pace. Bank balances now, the expected balance at the end of the month and its lowest point, this month's spend vs. your average, card charges still to come, budget status, alerts. A **scrape button** that runs the bank scrape from the browser — including entering an SMS / OTP code when the bank asks. |
 | **תנועות** (Transactions) | Every bank and card row, searchable and filterable. Edit category, member, tags, business share; "apply to similar" turns an edit into a rule. Add manual rows (cash, something paid by someone else). |
 | **קבועות החודש** (Fixed this month) | Salaries, standing orders, loans, subscriptions and card estimates for the month — which already arrived and which are still expected. |
 | **תקציב** (Budget) | Monthly budgets per category with progress, plus planned one-off expenses before they're charged. |
+| **קופה לאירועים צפויים** (Expected-events fund) | Holidays by the Hebrew calendar (Rosh Hashana, Hanukkah, Purim, Pesach), summer vacation, school supplies — each with its expected cost, suggested from what it cost in past years. How much to put aside every month so each one is covered in time, and after an event, "how much did it take from the pot?". |
 | **מגמות הוצאות** (Spending trends) | Per-category spend over months, drill-down into merchants. |
 | **תזרים ותחזית** (Cash flow & forecast) | Income vs. fixed vs. variable spend per month; a day-by-day balance forecast per bank account that knows your card statement dates, installments and recurring payments. |
 | **תובנות והתראות** (Insights) | Detected subscriptions and price changes, unusual charges, savings capacity, a plan for a tight month. |

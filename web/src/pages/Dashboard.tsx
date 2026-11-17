@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CreditCard, Gauge as GaugeIcon, Landmark, LayoutDashboard, PiggyBank, Receipt, Sparkles, TriangleAlert, Users, Wallet } from 'lucide-react';
-import { api, qs, type CycleSummary, type InstallmentPlan, type Summary } from '../api';
+import { CalendarDays, CreditCard, Gauge as GaugeIcon, Gift, Landmark, LayoutDashboard, PiggyBank, Receipt, Sparkles, TriangleAlert, Users, Wallet } from 'lucide-react';
+import { api, qs, type CycleSummary, type DailyAllowance, type InstallmentPlan, type Summary } from '../api';
 import { useFilters, useLookups } from '../state';
 import { day, monthName } from '../format';
 import { ErrorBox, Loading, MemberBadge, Money, MoreLink, PageHeader, Progress, SectionTitle, SeverityDot, Stat } from '../components/ui';
@@ -73,6 +73,7 @@ export default function Dashboard() {
         )}
       </div>
 
+      <AllowanceCard a={data.allowance} />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <div className="card min-w-0 lg:col-span-2">
@@ -272,6 +273,65 @@ export default function Dashboard() {
         </p>
       </div>
     </>
+  );
+}
+
+/** How much can go out every day until the end of the planning period without dropping below the buffer. */
+function AllowanceCard({ a }: { a: DailyAllowance }) {
+  const tone = a.status === 'none' ? 'text-negative' : a.status === 'tight' ? 'text-amber-600 dark:text-amber-400' : 'text-positive';
+  const limitedEarly = a.bindingDate < a.until;
+  const rows: { label: ReactNode; value: number; sign?: '+' | '−' }[] = [
+    { label: 'יתרה בעו״ש עכשיו', value: a.startBalance },
+    { label: `נכנס עד ${day(a.until)}`, value: a.incoming, sign: '+' },
+    { label: 'יוצא בחיובים ידועים', value: a.outgoing, sign: '−' },
+    { label: 'כרית ביטחון', value: a.buffer, sign: '−' },
+  ];
+  if (a.seasonal.perMonth > 0) rows.push({ label: <Link to="/seasonal" className="hover:underline">הפרשה לקופה לאירועים ←</Link>, value: a.seasonal.reserve, sign: '−' });
+  return (
+    <div className="card mt-4">
+      <SectionTitle icon={CalendarDays} color="var(--chart-2)" action={<MoreLink to="/cashflow">לתזרים</MoreLink>}>כמה אפשר להוציא ביום</SectionTitle>
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] md:gap-6">
+        <div className="min-w-0">
+          {a.status === 'none' ? (
+            <>
+              <div className={`text-3xl font-bold tracking-tight ${tone}`}>אין מרווח</div>
+              <p className="mt-2 text-sm leading-relaxed text-fg-subtle">
+                {a.shortfall > 0
+                  ? <>החיובים הידועים לבדם מורידים את היתרה ל-<Money value={a.lowest.balance} /> ב-{day(a.lowest.date)}, מתחת לכרית הביטחון. חסרים <Money value={a.shortfall} className="font-semibold text-foreground" />.</>
+                  : <>החיובים הידועים לא משאירים מה להוציא עד {day(a.bindingDate)} בלי לרדת מתחת לכרית הביטחון.</>}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className={`text-3xl font-bold tracking-tight ${tone}`}><Money value={a.perDay} animated /> <span className="text-base font-medium text-fg-subtle">ליום</span></div>
+              <p className="mt-2 text-sm leading-relaxed text-fg-subtle">
+                {limitedEarly
+                  ? <>עד {day(a.bindingDate)} ({a.bindingDays} ימים){a.nextIncome ? <>, לפני ההכנסה הבאה: {a.nextIncome.name} ב-{day(a.nextIncome.date)}</> : null}. אחרי זה יש יותר מרווח.</>
+                  : <>בכל אחד מ-{a.daysLeft} הימים שנשארו עד {day(a.until)}, כולל היום.</>}
+              </p>
+            </>
+          )}
+          {a.pace > 0 && (
+            <p className={`mt-2 text-sm ${a.status === 'ok' ? 'text-fg-subtle' : tone}`}>
+              {a.status === 'ok' ? 'הקצב הרגיל שלכם' : 'זה פחות מהקצב הרגיל שלכם'}: <Money value={a.pace} /> ליום על הוצאות משתנות.
+            </p>
+          )}
+          {a.seasonal.perMonth === 0 && <Link to="/seasonal" className="mt-3 inline-flex items-center gap-1.5 text-xs text-primary hover:underline"><Gift className="h-3.5 w-3.5" />חגים וחופש בדרך? להגדיר קופה לאירועים צפויים</Link>}
+          {a.stale && <p className="mt-2 text-xs text-amber-600">חלק מהיתרות לא עודכנו לאחרונה, אז המספר פחות מדויק.</p>}
+        </div>
+        <div className="min-w-0 rounded-xl bg-muted/50 p-3 text-sm">
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 py-1">
+              <span className="min-w-0 text-fg-subtle">{r.label}</span>
+              <span className="shrink-0 font-medium">{r.sign && <span className="me-0.5 text-fg-subtle">{r.sign}</span>}<Money value={r.value} /></span>
+            </div>
+          ))}
+          <p className="mt-2 border-t border-line-soft pt-2 text-xs leading-relaxed text-fg-subtle">
+            בלי קניות שוטפות, כי אותן המספר הזה מחלק. חיובי כרטיס נספרים רק בחלק הידוע (עסקאות שכבר דווחו, תשלומים וקבועות), וקנייה חדשה בכרטיס נספרת כאילו יצאה היום.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -149,6 +149,7 @@ export default function Savings() {
                 <span className="icon-tile h-9 w-9" style={{ ['--tile' as string]: hueFor(f.name) }}><PiggyBank /></span>
                 <input className="input min-w-0 flex-1 font-medium" defaultValue={f.name} onBlur={e => e.target.value !== f.name && saveFund.mutate({ id: f.id, name: e.target.value })} />
               </div>
+              {f.kind === 'seasonal' && <Link to="/seasonal" className="-mt-1 mb-3 block text-xs text-primary hover:underline">הקופה לאירועים צפויים: האירועים וההפרשה החודשית ←</Link>}
               <div className="grid grid-cols-2 gap-x-2 gap-y-3">
                 <Field label="יעד חודשי"><input className="input num" type="number" defaultValue={f.monthlyTarget}
                   onBlur={e => Number(e.target.value) !== f.monthlyTarget && saveFund.mutate({ id: f.id, monthlyTarget: Number(e.target.value) })} /></Field>

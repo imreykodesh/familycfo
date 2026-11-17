@@ -5,6 +5,7 @@ import { cashflowHistory, cycleSummary, cyclesSince, expectedIncome, historyRang
 import { budgetStatus } from '../../analytics/budgets.js';
 import { buildForecast, bankBalances, planningPeriod } from '../../analytics/forecast.js';
 import { installmentPlans, upcomingCardCharges } from '../../analytics/cards.js';
+import { buildAllowance } from '../../analytics/allowance.js';
 import { savingsCapacity, tightMonthPlan } from '../../analytics/planning.js';
 import { buildRecommendations } from '../../analytics/recommendations.js';
 import { netWorth } from '../../analytics/networth.js';
@@ -33,6 +34,7 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
     const windowEnd = [forecast.period.end, addDays(today(), 30)].sort()[1];
     const txs = loadTransactions(db);
     const periodCycle = cycleByKey(forecast.period.key, cycleStartDay(db));
+    const cardCharges = upcomingCardCharges(db, txs);
     return {
       cycle: cycleSummary(db, q.cycle, filter),
       balances: bankBalances(db),
@@ -48,7 +50,9 @@ export function analyticsRoutes(app: FastifyInstance, db: DB): void {
         warnings: forecast.warnings,
         buffer: forecast.buffer,
       },
-      cardCharges: upcomingCardCharges(db, txs).slice(0, 8),
+      cardCharges: cardCharges.slice(0, 8),
+      // how much can go out every day until the end of the planning period (src/analytics/allowance.ts)
+      allowance: buildAllowance(db, { filter, forecast, txs, cardCharges }),
       budgets: budgetStatus(db, { cycleKey: q.cycle, memberId: filter.memberId }).filter(b => b.budget != null).slice(0, 10),
       alerts: (db.prepare(`SELECT * FROM alerts WHERE dismissed_at IS NULL ORDER BY
         CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END, created_at DESC LIMIT 6`).all() as Record<string, unknown>[]).map(toApi),

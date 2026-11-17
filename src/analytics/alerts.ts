@@ -4,6 +4,7 @@ import { budgetStatus } from './budgets.js';
 import { buildForecast } from './forecast.js';
 import { unmatchedCardBills, upcomingCardCharges } from './cards.js';
 import { isOverdue, listPlanned } from './planned.js';
+import { seasonalPlan } from './seasonal.js';
 
 export interface AlertDraft {
   type: string;
@@ -141,6 +142,21 @@ export function generateAlerts(db: DB, asOf = today()): AlertDraft[] {
     drafts.push({ type: 'planned_overdue', severity: 'info', dedupeKey: `planned:${p.id}:${p.date}`,
       title: `עוד לא חויב: ${p.description}`,
       message: `${ils(p.amount)} היה צפוי ב-${p.date}. עדיין רלוונטי? אפשר לדחות או לבטל בעמוד ״קבועות החודש״.` });
+  }
+
+  // the expected-events fund: an event passed without "how much did it take", or one is close and not covered
+  const seasonal = seasonalPlan(db, { asOf, withSuggestions: false });
+  for (const e of seasonal.events) {
+    if (e.pendingSettle) {
+      drafts.push({ type: 'seasonal_settle', severity: 'info', dedupeKey: `seasonal-settle:${e.id}:${e.pendingSettle}`,
+        title: `${e.name} עבר — כמה יצא מהקופה?`,
+        message: `עדכנו בעמוד ״קופה לאירועים צפויים״ כמה כסף לקחתם מהקופה, כדי שהיתרה בה תהיה נכונה.` });
+    }
+  }
+  for (const e of seasonal.events.filter(e => e.active && !e.covered && e.daysUntil <= 45)) {
+    drafts.push({ type: 'seasonal_short', severity: 'warning', dedupeKey: `seasonal-short:${e.id}:${e.nextDate}`,
+      title: `${e.name} בעוד ${e.daysUntil} ימים, והקופה לא מכסה אותו`,
+      message: `צפוי ${ils(e.amount)}. בקופה ${ils(seasonal.pot.balance)}, כולל האירועים שלפניו.` });
   }
 
   // latest scrape per company failed
