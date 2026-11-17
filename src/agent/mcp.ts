@@ -36,7 +36,7 @@ const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
 db.pragma('query_only = ON');
 
 // GET endpoints the agent may read (all are read-only)
-const API_PATHS = /^\/(summary|income|cashflow|forecast|coverage|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|transactions\/\d+\/similar|planned|rules|links|categories|meta|events(\/\d+(\/candidates)?)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled|sync-status|scrape\/runs|logs|insurance|pension|investments|balance-history|history-range|allowance|seasonal|month-close|month-report|simulator\/(base|debts))$/;
+const API_PATHS = /^\/(summary|income|cashflow|forecast|coverage|cards\/upcoming|month-plan|installments|recurring|budgets|planning|alerts|recommendations|networth|transactions|transactions\/\d+\/similar|planned|rules|links|categories|meta|events(\/\d+(\/candidates)?)?|businesses\/\d+\/report|members|accounts|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled|sync-status|scrape\/runs|logs|insurance|pension|investments|balance-history|history-range|allowance|seasonal|month-close|month-report|simulator\/(base|debts)|health)$/;
 
 // endpoints the agent may change (the method is checked by the API's own routes)
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -48,6 +48,7 @@ const WRITE_PATHS = new RegExp('^/(' + [
   'events/\\d+/transactions',
   'seasonal(/\\d+(/settle)?|/pot)?',
   'month-close/\\d{4}-\\d{2}(/checks)?',
+  'health/ignore',
   'insurance(/\\d+)?', 'insurance/documents/\\d+', 'pension/import',
   'investments/refresh', 'investments/holdings(/\\d+)?',
   '(members|businesses|tags|funds|assets|asset-snapshots|liabilities|liability-snapshots|scheduled)(/\\d+)?',
@@ -78,6 +79,9 @@ ended fixed items, debts, top recommendations). Default: the last month that end
 /simulator/base (average monthly spend per category over the complete months, savings goals, loans that can be simulated and why
 others can't), /simulator/debts?extra=₪&cpi=%&fee=% (repaying the loans: only the fixed repayments vs snowball — smallest balance first —
 vs avalanche — highest interest first — with extra ₪ a month more: months to repay, interest, CPI linkage, fees, saving, closing order).
+/health (the health check: failed scrapes, backup age, stale balances, cards without a paying account, duplicates, uncategorized share,
+months missing mid-history, waiting payback links / planned items, suggested category rules; each with status problem / suggestion / ok,
+ignored = the user hid it; actions = the API calls its buttons make),
 /sync-status (each bank's last scrape: result, failures in a row, explanation), /scrape/runs?company=&failed=1&limit=N (scrape history with
 the error, the bank page's text when it failed, and an explanation), /logs?level=error|warn&days=N&search=TEXT (the app's log lines).
 Common filters on most: member=ID, business=ID, tags=ID,ID.`,

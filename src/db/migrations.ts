@@ -745,7 +745,7 @@ const SCRAPER_CATEGORY_ALIASES: Record<string, string> = {
 /** The account that holds manually entered transactions. */
 export const MANUAL_ACCOUNT_ID = 'manual:entries';
 
-const COMPANY_NAMES: Record<string, string> = {
+export const COMPANY_NAMES: Record<string, string> = {
   hapoalim: 'הפועלים', leumi: 'לאומי', discount: 'דיסקונט', mizrahi: 'מזרחי טפחות', mercantile: 'מרכנתיל',
   otsarHahayal: 'אוצר החייל', union: 'איגוד', beinleumi: 'הבינלאומי', massad: 'מסד', yahav: 'יהב', oneZero: 'וואן זירו',
   pagi: 'פאגי', visaCal: 'כאל', isracard: 'ישראכרט', amex: 'אמריקן אקספרס', max: 'מקס', beyahadBishvilha: 'ביחד בשבילך',

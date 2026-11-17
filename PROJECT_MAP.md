@@ -73,7 +73,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `db/migrations.ts` | מיגרציות ממוספרות (אחרונה: 19). לא לערוך מיגרציה ששוחררה — רק להוסיף בסוף |
 | `db/migrate.ts` | `runMigrations` |
 | `db/ingestRepo.ts` | שמירת חשבונות ותנועות שנמשכו (`saveScrapedAccount`, `recordScrapeRun`); לא דורס שדות שנערכו ידנית |
-| `db/backup.ts` | גיבוי יומי של המסד (`dailyBackup`) |
+| `db/backup.ts` | גיבוי יומי של המסד (`dailyBackup`), תאריך הגיבוי האחרון (`latestBackup`) |
 | `db/importData.ts` | ייבוא משק בית קיים לדסקטופ (`importHousehold`) |
 | `ingest/normalize.ts` | זהות תנועה ומניעת כפילויות, `localDate` |
 | `ingest/classify.ts` | כללים → מטמון → קטגוריית חברת האשראי → API; `deriveKinds` |
@@ -97,6 +97,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `allowance.ts` | כמה אפשר להוציא ביום: `computeAllowance` (טהורה), `buildAllowance`, `committedCardAmount` |
 | `hebcal.ts` | לוח עברי בלי ספרייה (Intl): `hebrewParts`, `occurrences`, `nextOccurrence`, `lastOccurrence`, `HEBREW_MONTHS` |
 | `monthClose.ts` | סגירת חודש ודוח: `monthChecks`, `monthCloseState`, `answerCheck` ("הסתיים" מסיים את הפריט הקבוע), `closeMonth` / `reopenMonth`, `monthSignature`, `closeHistory`, `monthReport` |
+| `health.ts` | בדיקת תקינות: `healthReport` (משיכות, גיבוי, יתרות ישנות, כרטיס בלי חשבון חיוב, כפילויות, בלי קטגוריה, חודשים חסרים, קישורי החזר והוצאות מתוכננות שממתינים, הצעות לכללי סיווג), `setIgnored`, `wordingOf` |
 | `simulator.ts` | סימולטור, טהור ובלי imports (רץ גם בדפדפן): `debtPlan` (בסיס / כדור שלג / מפולת, חודש אחרי חודש), `compareDebtPlans`, `debtQueue`, `cutImpact` |
 | `simulatorBase.ts` | הקלט של הסימולטור: `simulatorBase` (ממוצע לכל קטגוריה בחודשים המלאים, יעדי חיסכון, הלוואות עם יתרה, ריבית והחזר; מה חסר ולמה) |
 | `seasonal.ts` | קופה לאירועים צפויים: `seasonalPlan`, `monthlySetAside`, `suggestFromHistory`, `ensureSeasonalPot`, `settleSeasonalEvent`, `COMMON_EVENTS` |
@@ -120,7 +121,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrapeJob.ts` | משיכה מהממשק: `startScrape({ from, showBrowser, checkOnly, loginIds })`, `submitOtp` |
 | `scheduler.ts` | משיכה יומית בשעה קבועה (`scrape_time`) |
 | `appEvents.ts` | אירועים לאפליקציית הדסקטופ (`emitAppEvent`) |
-| `routes/*.ts` | transactions, analytics, categories, events, insurance, pension, investments, reports (העלאת דוח וייבוא JSON), seasonal (קופה לאירועים + `allowance`), monthClose (סגירת חודש ודוח), simulator (קלט לסימולטור והשוואת החזר חובות) |
+| `routes/*.ts` | transactions, analytics, categories, events, insurance, pension, investments, reports (העלאת דוח וייבוא JSON), seasonal (קופה לאירועים + `allowance`), monthClose (סגירת חודש ודוח), simulator (קלט לסימולטור והשוואת החזר חובות), health (בדיקת תקינות) |
 
 ### `desktop/` — Electron
 | קובץ | תפקיד |
@@ -160,18 +161,19 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 |---|---|---|
 | `/` | סקירה | |
 | `/transactions` | תנועות | `cycle`, `search`, `category`, `account`, `kind`, `review=1`, `charge` |
-| `/fixed` | קבועות החודש | `#scheduled` |
+| `/fixed` | קבועות החודש | `#scheduled`, `#planned` |
 | `/budgets` | תקציב | |
 | `/seasonal` | קופה לאירועים צפויים | |
 | `/month-close` | סגירת חודש ודוח חודשי (להדפסה) | `cycle` |
 | `/simulator` | סימולטור: קיצוץ לפי קטגוריה, כדור שלג מול מפולת (לא נשמר כלום) | |
+| `/health` | בדיקת תקינות (מספר אדום בתפריט = בעיות פתוחות) | |
 | `/trends` | מגמות הוצאות (6 / 12 / 24 / מקסימום) | `parent`, `leaf` |
 | `/cashflow` | תזרים ותחזית | |
 | `/insights` | תובנות והתראות | |
 | `/events` | אירועים ותגיות | `id` |
 | `/businesses`, `/savings`, `/investments`, `/pension`, `/loans`, `/insurance`, `/categories` | | |
 | `/logs` | יומן ותקלות | |
-| `/settings` | הגדרות | `#members` |
+| `/settings` | הגדרות | `#members`, `#accounts` |
 | `/welcome` | אשף התחלה (דסקטופ) | |
 
 הצ'אט מקשר למסכים האלה (`agent/CLAUDE.md` → "Links into the app"). מסך או פרמטר חדש — לעדכן גם שם.
@@ -191,6 +193,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | מתוכננות | `GET/POST planned`, `PUT/PATCH/DELETE planned/:id`, `POST planned/:id/match` |
 | קופה לאירועים, סכום יומי | `GET/POST seasonal`, `PATCH/DELETE seasonal/:id`, `POST seasonal/:id/settle`, `PUT seasonal/pot`, `GET allowance` (גם בתוך `summary.allowance`) |
 | סגירת חודש | `GET month-close?cycle=`, `PUT month-close/:cycle/checks` `{checkId, answer}`, `POST/DELETE month-close/:cycle`, `GET month-report?cycle=` |
+| בדיקת תקינות | `GET health`, `PUT health/ignore` `{id, ignore}` |
 | סימולטור | `GET simulator/base` (הקלט; החישוב רץ בדפדפן), `GET simulator/debts?extra=&cpi=&fee=` (אותה השוואה בשרת, לצ'אט) |
 | ניתוח | `summary`, `income`, `cashflow` (`cycles=N` / `max`), `cashflow/export.csv`, `forecast`, `cards/upcoming`, `month-plan`, `installments`, `recurring`, `budgets` (+`PUT`), `planning`, `alerts` (+`PATCH :id`), `recommendations` (+`POST state`), `networth`, `balance-history`, `coverage` (לכל חשבון), `history-range` (לכל חברה) |
 | קטגוריות ואירועים | `GET/POST categories`, `PATCH/DELETE categories/:id`, `events`, `events/:id`, `events/:id/candidates`, `POST events/:id/transactions` |
@@ -224,6 +227,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `scrape_time`, `scrape_catch_up` | משיכה יומית בדסקטופ |
 | `notify_scrape`, `notify_alerts` | התראות בדסקטופ |
 | `onboarding_done` | האשף הושלם |
+| `health_ignore` | JSON: מזהה בדיקה ← הנוסח שהמשתמש הסתיר (נכתב רק דרך `PUT /api/health/ignore`) |
 
 הצ'אט יכול לשנות רק `cycle_start_day`, `balance_buffer`, `scrape_months_back`.
 

@@ -321,7 +321,7 @@ function PlannedCard({ items, all, month, onAdd, onEdit, onAction }: {
   const shown = new Set(items.map(i => i.id));
   const later = all.filter(i => i.status === 'planned' && !shown.has(i.id));
   return (
-    <div className="card mt-4">
+    <div id="planned" className="card mt-4 scroll-mt-20">
       <SectionTitle icon={Clock} color={COLORS.planned} action={<button className="btn" onClick={onAdd}><Plus />הוצאה צפויה</button>}>
         <span>הוצאות צפויות ב{month}</span>
       </SectionTitle>
