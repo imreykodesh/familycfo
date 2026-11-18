@@ -2,6 +2,7 @@ import type { DB } from '../db/connection.js';
 import { categorize } from '../categorizer.js';
 import { merchantKey } from '../analytics/common.js';
 import { SCRAPER_CATEGORY_MAP } from './scraperCategories.js';
+import { keywordCategoryNames, normalizeDescription } from './keywordCategories.js';
 
 // JS `\b` only knows ASCII word characters, so Hebrew words need an explicit end-of-word lookahead
 const WORD_END = `(?=$|[\\s\\-–'"״׳])`;
@@ -118,8 +119,45 @@ export function scraperCategory(db: DB, sourceCategory: string): number | undefi
 }
 
 /**
- * Fill in categories for uncategorized rows: rules → same-description cache → the scraper's
- * own category (`scraperCategory`) → the external categorization API.
+ * The same merchant written a little differently: lower case, no punctuation, digits removed from
+ * every word (reference numbers, branch codes, "HAIM4723" → "haim"). Empty when nothing is left.
+ */
+export function similarKey(description: string): string {
+  return normalizeDescription(description)
+    .split(' ')
+    .map(w => w.replace(/\p{N}+/gu, ''))
+    .filter(Boolean)
+    .join(' ');
+}
+
+/**
+ * Whether a category of this kind fits the row's direction: income categories take money in,
+ * expense categories money out (or a refund on a card). Transfer / savings / card-bill categories
+ * go either way (the keyword index has none that could turn spend into a transfer).
+ */
+export function categoryFits(categoryKind: string | null, amount: number, accountKind: string | null): boolean {
+  switch (categoryKind ?? 'expense') {
+    case 'income': return amount > 0;
+    case 'expense': return amount < 0 || (amount > 0 && accountKind === 'card');
+    default: return true;
+  }
+}
+
+/** The household's category for the built-in keyword index (`KEYWORD_CATEGORIES`), if one fits the row. */
+export function keywordCategory(db: DB, description: string, amount: number, accountKind: string | null): number | undefined {
+  for (const name of keywordCategoryNames(description)) {
+    const id = findCategory(db, name);
+    if (!id) continue;
+    const kind = db.prepare(`SELECT kind FROM categories WHERE id = ?`).pluck().get(id) as string | null;
+    if (categoryFits(kind, amount, accountKind)) return id;
+  }
+  return undefined;
+}
+
+/**
+ * Fill in categories for uncategorized rows: rules → same-description cache → the same merchant
+ * written differently (`similarKey`) → the built-in keyword index → the scraper's own category
+ * (`scraperCategory`) → the external categorization API.
  */
 export async function categorizeTransactions(db: DB, txIds: number[], apiUrl?: string): Promise<void> {
   applyRules(db, txIds);
@@ -131,18 +169,43 @@ export async function categorizeTransactions(db: DB, txIds: number[], apiUrl?: s
     LIMIT 1
   `).pluck();
   const set = db.prepare(`UPDATE transactions SET category_id = ?, category_source = ? WHERE id = ?`);
+  const accountKind = db.prepare(`SELECT kind FROM accounts WHERE id = ?`).pluck();
+  const categoryKind = db.prepare(`SELECT kind FROM categories WHERE id = ?`).pluck();
   const apiCache = new Map<string, number | null>();
+
+  // similar key → category, from rows already categorized (by hand first, then rules, then the newest)
+  const similar = new Map<string, number>();
+  if (txIds.length) {
+    const known = db.prepare(`
+      SELECT description, category_id FROM transactions WHERE category_id IS NOT NULL
+      ORDER BY CASE category_source WHEN 'manual' THEN 2 WHEN 'rule' THEN 1 ELSE 0 END, id
+    `).all() as { description: string; category_id: number }[];
+    for (const r of known) { const key = similarKey(r.description); if (key.length >= 3) similar.set(key, r.category_id); }
+  }
 
   for (const id of txIds) {
     const tx = db.prepare(`SELECT * FROM transactions WHERE id = ?`).get(id) as TxRow | undefined;
     // a row the user left without a category on purpose stays that way
     if (!tx || tx.category_id != null || tx.category_source === 'manual') continue;
+    const key = similarKey(tx.description);
+    const found = (categoryId: number, source: string) => {
+      set.run(categoryId, source, tx.id);
+      if (key.length >= 3 && !similar.has(key)) similar.set(key, categoryId);
+    };
 
+    const kindOfAccount = accountKind.get(tx.account_id) as string | null;
+    // the same description in the other direction (a loan charge and its credit) isn't the same category
     const cached = cache.get(tx.description, tx.id) as number | undefined;
-    if (cached) { set.run(cached, 'cache', tx.id); continue; }
+    if (cached && categoryFits(categoryKind.get(cached) as string | null, tx.charged_amount, kindOfAccount)) { found(cached, 'cache'); continue; }
+
+    const alike = key.length >= 3 ? similar.get(key) : undefined;
+    if (alike && categoryFits(categoryKind.get(alike) as string | null, tx.charged_amount, kindOfAccount)) { found(alike, 'cache'); continue; }
+
+    const fromKeywords = keywordCategory(db, tx.description, tx.charged_amount, kindOfAccount);
+    if (fromKeywords) { found(fromKeywords, 'keyword'); continue; }
 
     const fromScraper = tx.source_category ? scraperCategory(db, tx.source_category) : undefined;
-    if (fromScraper) { set.run(fromScraper, 'scraper', tx.id); continue; }
+    if (fromScraper) { found(fromScraper, 'scraper'); continue; }
 
     if (!apiUrl) continue;
     if (!apiCache.has(tx.description)) {

@@ -64,7 +64,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `browser.ts` | איתור Chrome/Edge מותקן או הורדת Chrome for Testing (`findBrowser`, `startBrowserDownload`) |
 | `config.ts` | פרטי הכניסה: `accounts.json` או ספק מהדסקטופ (`setConfigProvider`, `loadConfig`) |
 | `paths.ts` | `DATA_DIR` (`HOUSEHOLD_HOME`), `APP_DIR` (`HOUSEHOLD_APP_DIR`), `IN_DESKTOP` |
-| `pipeline.ts` | אחרי כל משיכה: שערים → סיווג → סוגים → חיובי כרטיס → העברות → קבועות → אימות מעבר כרטיס / ביטולים → הצעות → החזרים → התראות |
+| `pipeline.ts` | אחרי כל משיכה: שערים → סיווג (התנועות החדשות, וגם כל תנועה ישנה בלי קטגוריה — בלי API) → סוגים → חיובי כרטיס → העברות → קבועות → אימות מעבר כרטיס / ביטולים → הצעות → החזרים → התראות |
 | `categorizer.ts` | סיווג חיצוני אופציונלי (`category_api_url`) |
 | `log.ts` | קבצי יומן `data/logs` (14 יום): `installFileLog`, `readLogs` |
 | `scrapeErrors.ts` | הסבר בעברית לכשל משיכה (`explainScrapeError`) |
@@ -76,7 +76,8 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `db/backup.ts` | גיבוי יומי של המסד (`dailyBackup`), תאריך הגיבוי האחרון (`latestBackup`) |
 | `db/importData.ts` | ייבוא משק בית קיים לדסקטופ (`importHousehold`) |
 | `ingest/normalize.ts` | זהות תנועה ומניעת כפילויות, `localDate`; לתנועה ממתינה בלי סכום חיוב (מקס) נותנים את סכום הקנייה, רק בשקלים |
-| `ingest/classify.ts` | כללים → מטמון → קטגוריית חברת האשראי (`scraperCategory`: שם קיים / כינוי → המיפוי לקטגוריה קיימת; אף פעם לא יוצר קטגוריה) → API; `deriveKinds` |
+| `ingest/classify.ts` | כללים → מטמון (אותו תיאור) → אותו בית עסק בכתיב קצת שונה (`similarKey`: בלי מספרים וסימנים) → אינדקס מילות המפתח (`keywordCategory`) → קטגוריית חברת האשראי (`scraperCategory`: שם קיים / כינוי → המיפוי לקטגוריה קיימת; אף פעם לא יוצר קטגוריה) → API; רק קטגוריה שמתאימה לכיוון (`categoryFits`: הכנסה לכסף שנכנס, הוצאה לכסף שיוצא או לזיכוי בכרטיס); `deriveKinds` |
+| `ingest/keywordCategories.ts` | `KEYWORD_CATEGORIES`: האינדקס המובנה — שם קטגוריה מעץ ברירת המחדל ← מילים ושמות בתי עסק (כספומט, ע"ר, משכורת, תאגיד המים...); `keywordCategoryNames`, `normalizeDescription`. סדר הרשומות קובע (ספציפי לפני כללי) |
 | `ingest/scraperCategories.ts` | `SCRAPER_CATEGORY_MAP`: שמות הקטגוריות של מקס / ישראכרט / כאל → קטגוריות ברירת המחדל |
 | `ingest/transfers.ts` | התאמת חיובי כרטיס והעברות בין חשבונות |
 | `import/pensionReport.ts`, `import/insurancePolicies.ts` | ייבוא דוחות JSON (`importPensionReport`, `importInsurance`) — משורת הפקודה או מה-API |

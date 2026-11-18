@@ -20,17 +20,20 @@ export interface PipelineOptions {
 
 /** Everything that runs after a scrape: classify → kinds/transfers → recurring → suggestions → alerts. */
 export async function runPipeline(db: DB = getDb(), opts: PipelineOptions = {}): Promise<Record<string, number>> {
-  // the given rows, plus older uncategorized rows the card company categorized (no API call needed for them)
-  const ids = opts.txIds
-    ? [...new Set([...opts.txIds, ...db.prepare(`SELECT id FROM transactions
-        WHERE category_id IS NULL AND COALESCE(category_source, '') != 'manual' AND TRIM(COALESCE(source_category, '')) != ''`).pluck().all() as number[]])]
-    : (db.prepare(`SELECT id FROM transactions WHERE category_id IS NULL`).pluck().all() as number[]);
+  // the given rows (these may go to the external API), plus every older uncategorized row: a new rule,
+  // a row categorized by hand or a new keyword may fit it now (no API call for those)
+  const uncategorized = db.prepare(`SELECT id FROM transactions
+    WHERE category_id IS NULL AND COALESCE(category_source, '') != 'manual'`).pluck().all() as number[];
+  const ids = opts.txIds ?? uncategorized;
+  const given = new Set(opts.txIds ?? uncategorized);
+  const older = uncategorized.filter(id => !given.has(id));
 
   if (opts.fetchRates !== false) {
     try { await refreshBoiRates(db); } catch (err) { console.warn('  FX rates not refreshed:', (err as Error).message); }
     try { await refreshQuotes(db, 0); await refreshHistory(db); } catch (err) { console.warn('  stock prices not refreshed:', (err as Error).message); }
   }
   await categorizeTransactions(db, ids, opts.categoryApiUrl);
+  await categorizeTransactions(db, older);
   deriveKinds(db, 'all');
   const cardBills = reconcileCardBills(db);
   const debits = matchImmediateCardDebits(db);

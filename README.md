@@ -168,7 +168,10 @@ accounts, two cards, a mortgage, savings and a small stock portfolio. Delete `de
    - **כללי** — the day your monthly cycle starts and the minimum balance you want to keep.
 
 5. **Categories.** A new database starts with a default Hebrew category tree, and the card companies' own category
-   names (e.g. "מזון וצריכה") are mapped to it, so most card rows are categorized right away. Fix the rest on the
+   names (e.g. "מזון וצריכה") are mapped to it, so most card rows are categorized right away. Rows with no card
+   category (bank rows, Max's "שונות") go through a built-in index of words and merchant names (ATM, ע"ר
+   nonprofits, salary, water company, loans, bank fees...), and a merchant you categorized once is recognized
+   again even when its description changes a little (reference numbers, punctuation). Fix the rest on the
    transactions page; "החל על תנועות דומות" saves a rule for next time.
 
 ## Building the Windows installer and checking the code

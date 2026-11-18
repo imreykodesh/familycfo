@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { legacyIdentifier, normalizeTransactions, type ScrapedTransaction } from '../src/ingest/normalize.js';
 import { saveTransactions } from '../src/db/ingestRepo.js';
-import { applyRules, deriveKinds, findCategory, getOrCreateCategory, kindFor } from '../src/ingest/classify.js';
+import { applyRules, categorizeTransactions, deriveKinds, findCategory, getOrCreateCategory, kindFor, similarKey } from '../src/ingest/classify.js';
+import { KEYWORD_CATEGORIES } from '../src/ingest/keywordCategories.js';
 import { openDb } from '../src/db/connection.js';
 import { matchImmediateCardDebits, matchInternalTransfers, reconcileCardBills } from '../src/ingest/transfers.js';
 import { addAccount, addTx, testDb } from './helpers.js';
@@ -186,6 +187,67 @@ describe('merged categories', () => {
     const id = addTx(db, { account: 'bank:1', date: '2026-09-10', description: 'תאגיד המים בע"-י', amount: -250, kind: 'expense' });
     applyRules(db, [id]);
     expect(db.prepare(`SELECT category_id FROM transactions WHERE id = ?`).pluck().get(id)).toBe(cat);
+  });
+});
+
+describe('keyword index and similar merchants', () => {
+  const household = () => {
+    const db = openDb(':memory:');
+    addAccount(db, 'discount:1', 'bank');
+    addAccount(db, 'max:1', 'card');
+    return db;
+  };
+  const categoryOf = (db: ReturnType<typeof openDb>, id: number) =>
+    db.prepare(`SELECT c.name FROM transactions t LEFT JOIN categories c ON c.id = t.category_id WHERE t.id = ?`).pluck().get(id);
+
+  it('names only categories of the default tree', () => {
+    const db = openDb(':memory:');
+    const missing = KEYWORD_CATEGORIES.map(([name]) => name).filter(name => !findCategory(db, name));
+    expect(missing).toEqual([]);
+  });
+
+  it('categorizes bank rows and Max "שונות" rows by the words in the description, in the right direction', async () => {
+    const db = household();
+    const atm = addTx(db, { account: 'max:1', date: '2026-09-01', description: 'כספומט דיסקונט  דרך בן ג', amount: -500 });
+    const atmBank = addTx(db, { account: 'discount:1', date: '2026-09-01', description: "מש' מכספומט דיסקונט 17/04", amount: -1800 });
+    const allowance = addTx(db, { account: 'discount:1', date: '2026-09-02', description: 'ביטוח לאומי - ילדים', amount: 280 });
+    const nii = addTx(db, { account: 'discount:1', date: '2026-09-03', description: 'ביטוח לאומי', amount: -310 });
+    const charity = addTx(db, { account: 'max:1', date: '2026-09-04', description: 'עזר מציון (ע"ר) - הוראות', amount: -26 });
+    const gate = addTx(db, { account: 'max:1', date: '2026-09-04', description: 'שער הגיא', amount: -40 });
+    const water = addTx(db, { account: 'max:1', date: '2026-09-05', description: 'מי ברק-תאגיד המים והביוב', amount: -199 });
+    const loan = addTx(db, { account: 'discount:1', date: '2026-09-06', description: 'טפחות - לווים (י)', amount: -2773 });
+    const salary = addTx(db, { account: 'discount:1', date: '2026-09-07', description: 'שערי בני צ משכורת', amount: 4000 });
+    const tax = addTx(db, { account: 'discount:1', date: '2026-09-08', description: 'חיוב מס בפרעון פיקדון', amount: -6 });
+    db.prepare(`UPDATE transactions SET source_category = 'שונות' WHERE id IN (?, ?)`).run(charity, gate);
+    await categorizeTransactions(db, [atm, atmBank, allowance, nii, charity, gate, water, loan, salary, tax]);
+    expect([atm, atmBank, allowance, nii, charity, gate, water, loan, salary, tax].map(id => categoryOf(db, id))).toEqual(
+      ['מזומן', 'מזומן', 'הכנסות', 'מיסים, דוחות ועמלות', 'תרומה', null, 'מים', 'הלוואות ומשכנתא', 'משכורת', 'מיסים, דוחות ועמלות']);
+    expect(db.prepare(`SELECT category_source FROM transactions WHERE id = ?`).pluck().get(atm)).toBe('keyword');
+  });
+
+  it('gives a merchant written a little differently the category the household gave it', async () => {
+    const db = household();
+    const known = addTx(db, { account: 'max:1', date: '2026-09-01', description: 'PAYPAL *HAIM4723       4029357733    LU', amount: -20 });
+    const other = addTx(db, { account: 'max:1', date: '2026-09-01', description: 'אמרי קודש', amount: -2 });
+    db.prepare(`UPDATE transactions SET category_id = ?, category_source = 'manual' WHERE id = ?`).run(findCategory(db, 'תרומה'), known);
+    db.prepare(`UPDATE transactions SET category_id = ?, category_source = 'manual' WHERE id = ?`).run(findCategory(db, 'מנויים ושירותים דיגיטליים'), other);
+    const same = addTx(db, { account: 'max:1', date: '2026-09-02', description: 'PAYPAL *HAIM4723       17280818884   LU', amount: -20 });
+    const notSame = addTx(db, { account: 'max:1', date: '2026-09-02', description: 'PAYPAL *CHIME2155      4029357733    LU', amount: -7 });
+    const variant = addTx(db, { account: 'max:1', date: '2026-09-03', description: 'אמרי-קודש 2', amount: -2 });
+    await categorizeTransactions(db, [same, notSame, variant]);
+    expect([same, notSame, variant].map(id => categoryOf(db, id))).toEqual(['תרומה', null, 'מנויים ושירותים דיגיטליים']);
+    expect(similarKey('PAYPAL *ALIPAYSINGA    4029357733    SG')).toBe(similarKey('PAYPAL *ALIPAYSINGA    17280818884   SG'));
+  });
+
+  it('never copies a category into the other direction, and leaves a row the user cleared alone', async () => {
+    const db = household();
+    const credit = addTx(db, { account: 'discount:1', date: '2026-09-01', description: 'זיכוי כלשהו', amount: 300 });
+    db.prepare(`UPDATE transactions SET category_id = ? WHERE id = ?`).run(findCategory(db, 'הכנסות'), credit);
+    const debit = addTx(db, { account: 'discount:1', date: '2026-09-02', description: 'זיכוי כלשהו', amount: -300 });
+    const cleared = addTx(db, { account: 'max:1', date: '2026-09-02', description: 'כספומט', amount: -100 });
+    db.prepare(`UPDATE transactions SET category_source = 'manual' WHERE id = ?`).run(cleared);
+    await categorizeTransactions(db, [debit, cleared]);
+    expect([categoryOf(db, debit), categoryOf(db, cleared)]).toEqual([null, null]);
   });
 });
 
