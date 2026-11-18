@@ -3,7 +3,8 @@
  * Used at categorize time, so it works for any database (migration 14 copied an older list into
  * `category_aliases` only for databases created with the default tree).
  * Max's list: https://onlinelcapi.max.co.il/api/contents/getCategories (22 names, Nov 2026).
- * Names with no clear meaning here (Max "העברת כספים") are left out: they get a category of their own.
+ * Names with no clear meaning here (Max "העברת כספים": paying a person can be spend or a transfer) are
+ * left out on purpose: those rows stay uncategorized for the user to decide.
  */
 export const SCRAPER_CATEGORY_MAP: Record<string, string> = {
   // Max

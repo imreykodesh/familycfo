@@ -76,7 +76,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | `db/backup.ts` | גיבוי יומי של המסד (`dailyBackup`), תאריך הגיבוי האחרון (`latestBackup`) |
 | `db/importData.ts` | ייבוא משק בית קיים לדסקטופ (`importHousehold`) |
 | `ingest/normalize.ts` | זהות תנועה ומניעת כפילויות, `localDate`; לתנועה ממתינה בלי סכום חיוב (מקס) נותנים את סכום הקנייה, רק בשקלים |
-| `ingest/classify.ts` | כללים → מטמון → קטגוריית חברת האשראי (`scraperCategory`: שם קיים / כינוי → המיפוי → קטגוריה חדשה בשם של החברה) → API; `deriveKinds` |
+| `ingest/classify.ts` | כללים → מטמון → קטגוריית חברת האשראי (`scraperCategory`: שם קיים / כינוי → המיפוי לקטגוריה קיימת; אף פעם לא יוצר קטגוריה) → API; `deriveKinds` |
 | `ingest/scraperCategories.ts` | `SCRAPER_CATEGORY_MAP`: שמות הקטגוריות של מקס / ישראכרט / כאל → קטגוריות ברירת המחדל |
 | `ingest/transfers.ts` | התאמת חיובי כרטיס והעברות בין חשבונות |
 | `import/pensionReport.ts`, `import/insurancePolicies.ts` | ייבוא דוחות JSON (`importPensionReport`, `importInsurance`) — משורת הפקודה או מה-API |
