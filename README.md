@@ -221,7 +221,8 @@ Each question starts the tool in a temporary folder with:
   whitelisted endpoints — the same calls the screens make), plus for Gemini and Kiro `read_document` (the documents);
 - its instructions in [`agent/CLAUDE.md`](agent/CLAUDE.md) and skills in [`agent/.claude/skills/`](agent/.claude/skills)
   (monthly review, subscriptions audit, category deep-dive, trip cost, insurance questions, pension and portfolio
-  reviews, importing an uploaded report, scrape problems). Edit them to change how it answers — every provider gets the same ones.
+  reviews, importing an uploaded report, scrape problems, categorizing the rows that have no category — the
+  "סווג בעזרת AI" button on the transactions page: it proposes, and after your yes saves each merchant as a rule). Edit them to change how it answers — every provider gets the same ones.
 
 The chat changes data when you ask it to ("set a ₪1,500 budget for restaurants", "move these to groceries", "add a ₪120
 cash expense"); when a change is its own suggestion it asks first, with a one-click button. Its answers link to the

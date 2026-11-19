@@ -167,7 +167,7 @@ React 19 + Vite + Tailwind 4 + TanStack Query + react-router 7, Electron + elect
 | נתיב | מסך | פרמטרים ב-URL |
 |---|---|---|
 | `/` | סקירה (במצב פשוט: נשאר להוציא החודש, הכנסות, הוצאות, בבנק, על מה הלך הכסף, התראות; במצב מלא: הכול) | |
-| `/transactions` | תנועות | `cycle`, `search`, `category`, `account`, `kind` (גם כמה, למשל `expense,refund`), `review=1`, `charge`, `fixed=1/0` |
+| `/transactions` | תנועות (כפתור „סווג בעזרת AI" שולח לצ'אט, skill `categorize-transactions`: מציע קטגוריות, ואחרי אישור שומר כלל לכל בית עסק) | `cycle`, `search`, `category`, `account`, `kind` (גם כמה, למשל `expense,refund`), `review=1`, `charge`, `fixed=1/0` |
 | `/fixed` | קבועות החודש | `#scheduled`, `#planned` |
 | `/budgets` | תקציב | |
 | `/seasonal` | קופה לאירועים צפויים | |
