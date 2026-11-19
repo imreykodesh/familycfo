@@ -27,6 +27,29 @@ const KIND_ICONS: Record<string, ReactNode> = {
 const kindOptions = (): PickerOption[] => Object.entries(KIND_LABELS).map(([k, v]) => ({ value: k, label: v, icon: KIND_ICONS[k] }));
 const formatCount = (n: number) => Math.round(n).toLocaleString('he-IL');
 
+/** What a rule ("apply to similar") can repeat from an edit: the POST /rules fields, only those that set something. */
+function ruleFields(body: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (body.categoryId != null) out.setCategoryId = body.categoryId;
+  if (body.businessId != null) { out.setBusinessId = body.businessId; out.setBusinessSharePct = body.businessSharePct ?? 100; }
+  if (body.memberId != null) out.setMemberId = body.memberId;
+  if (body.kind != null) out.setKind = body.kind;
+  if (body.excluded != null) out.setExcluded = body.excluded ? 1 : 0;
+  return out;
+}
+
+/** The changes a rule will make, in words, for the "apply to similar" question. */
+function ruleSummary(body: Record<string, unknown>, names: { category: (id: number) => string | undefined; member: (id: number) => string | undefined; business: (id: number) => string | undefined }): string[] {
+  const f = ruleFields(body);
+  const out: string[] = [];
+  if (f.setCategoryId != null) out.push(`קטגוריה: ${names.category(Number(f.setCategoryId)) ?? ''}`);
+  if (f.setMemberId != null) out.push(`שייך ל: ${names.member(Number(f.setMemberId)) ?? ''}`);
+  if (f.setBusinessId != null) out.push(`עסק: ${names.business(Number(f.setBusinessId)) ?? ''}`);
+  if (f.setKind != null) out.push(`סוג: ${KIND_LABELS[String(f.setKind)] ?? f.setKind}`);
+  if (f.setExcluded != null) out.push(f.setExcluded ? 'הסתרה מהחישובים' : 'החזרה לחישובים');
+  return out;
+}
+
 function cycleOptions(n = 12): string[] {
   const d = new Date(`${todayIso().slice(0, 7)}-01T12:00:00`);
   return Array.from({ length: n }, (_, i) => {
@@ -38,7 +61,7 @@ function cycleOptions(n = 12): string[] {
 
 export default function Transactions() {
   const { params } = useFilters();
-  const { member, business, tag, meta } = useLookups();
+  const { member, business, tag, category: categoryById, meta } = useLookups();
   const qc = useQueryClient();
   // filters can arrive in the URL (e.g. clicking a category on the dashboard)
   const [urlParams, setUrlParams] = useSearchParams();
@@ -85,8 +108,8 @@ export default function Transactions() {
     mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => api.patch<Tx>(`/transactions/${id}`, body),
     onSuccess: async (_res, { id, body }) => {
       invalidate();
-      // offer "apply to all similar" for category / business / member edits
-      if ('categoryId' in body || 'businessId' in body || 'memberId' in body) {
+      // offer "apply to all similar" for the edits a rule can repeat (category, business, member, kind, hiding)
+      if (Object.keys(ruleFields(body)).length) {
         const similar = await api.get<{ count: number }>(`/transactions/${id}/similar`);
         const tx = data?.rows.find(r => r.id === id);
         if (similar.count > 0 && tx) setSuggestRule({ tx, patch: body, count: similar.count });
@@ -101,11 +124,7 @@ export default function Transactions() {
 
   const createRule = useMutation({
     mutationFn: ({ tx, patchBody }: { tx: Tx; patchBody: Record<string, unknown> }) => api.post<{ applied: number }>('/rules', {
-      fromTransactionId: tx.id,
-      setCategoryId: patchBody.categoryId ?? undefined,
-      setBusinessId: patchBody.businessId ?? undefined,
-      setBusinessSharePct: patchBody.businessSharePct ?? undefined,
-      setMemberId: patchBody.memberId ?? undefined,
+      fromTransactionId: tx.id, ...ruleFields(patchBody),
     }),
     onSuccess: () => { invalidate(); setSuggestRule(null); },
   });
@@ -324,16 +343,25 @@ export default function Transactions() {
           </button>
         </>}>
           <p className="text-sm">
-            יש עוד {suggestRule.count} תנועות של <b>{suggestRule.tx.description}</b>. אפשר ליצור כלל שיחול עליהן וגם על תנועות חדשות מאותו בית עסק.
-            תנועות ששינית ידנית לא ישתנו.
+            יש עוד {suggestRule.count} תנועות של <b>{suggestRule.tx.description}</b>. אפשר ליצור כלל שיחול עליהן וגם על תנועות חדשות מאותו בית עסק:
           </p>
+          <ul className="my-2 list-disc ps-5 text-sm">
+            {ruleSummary(suggestRule.patch, {
+              category: id => categoryById(id)?.name, member: id => member(id)?.name, business: id => business(id)?.name,
+            }).map(s => <li key={s}>{s}</li>)}
+          </ul>
+          <p className="text-sm text-fg-muted">קטגוריה או סוג שקבעת ידנית בתנועה מסוימת לא ישתנו.</p>
+          {createRule.isError && <p className="mt-2 text-sm text-rose-600">הכלל לא נשמר: {(createRule.error as Error).message}</p>}
         </Modal>
       )}
 
       {manual && <ManualEntry tx={manual === 'new' ? null : manual} defaultMemberId={params.member ? Number(params.member) : undefined}
         onClose={() => setManual(null)} onSaved={() => { invalidate(); setManual(null); }} />}
 
-      {editing && <TxDrawer tx={editing} onClose={() => setEditing(null)} onSave={body => { patch.mutate({ id: editing.id, body }); setEditing(null); }} />}
+      {editing && <TxDrawer tx={editing} onClose={() => setEditing(null)} onSave={body => {
+        if (Object.keys(body).length) patch.mutate({ id: editing.id, body });
+        setEditing(null);
+      }} />}
     </>
   );
 }
@@ -344,11 +372,22 @@ function TxDrawer({ tx, onClose, onSave }: { tx: Tx; onClose: () => void; onSave
     businessSharePct: tx.businessId ? Math.round((tx.businessAmount / (tx.amount || 1)) * 100) : 100,
     kind: tx.kind, fixedOverride: tx.fixed ? 1 : 0, excluded: tx.excluded ? 1 : 0, notes: tx.notes ?? '', tagIds: tx.tagIds,
   });
+  const [initial] = useState(form);
   const set = (patch: Partial<typeof form>) => setForm(f => ({ ...f, ...patch }));
+  // only what the user changed: saving the form must not mark an untouched automatic category as set by hand,
+  // and "apply to similar" offers exactly the changes that were made
+  const changes = (): Record<string, unknown> => {
+    const body: Record<string, unknown> = {};
+    for (const k of Object.keys(form) as (keyof typeof form)[]) {
+      if (JSON.stringify(form[k]) !== JSON.stringify(initial[k])) body[k] = form[k];
+    }
+    if ('businessId' in body || 'businessSharePct' in body) Object.assign(body, { businessId: form.businessId, businessSharePct: form.businessSharePct });
+    return body;
+  };
   return (
     <Modal title={tx.description} onClose={onClose} footer={<>
       <button className="btn" onClick={onClose}>ביטול</button>
-      <button className="btn btn-primary" onClick={() => onSave(form)}>שמור</button>
+      <button className="btn btn-primary" onClick={() => onSave(changes())}>שמור</button>
     </>}>
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div><div className="label">סכום</div><Money value={tx.amount} cents colored /></div>

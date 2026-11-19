@@ -157,7 +157,7 @@ export interface Link {
 }
 export interface Rule {
   id: number; matchType: string; pattern: string; accountId: string | null; setCategoryId: number | null;
-  setBusinessId: number | null; setBusinessSharePct: number | null; setMemberId: number | null; setKind: string | null; setTagIds: string | null;
+  setBusinessId: number | null; setBusinessSharePct: number | null; setMemberId: number | null; setKind: string | null; setTagIds: string | null; setExcluded: number | null;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {

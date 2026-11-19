@@ -72,7 +72,7 @@ At most 3 per answer, at the end, short labels.
 | Re-categorize / edit one transaction | `PATCH /transactions/ID` `{categoryId?, memberId?, businessId?, businessSharePct?, kind?, fixedOverride?: 0/1/null, excluded?: 0/1, notes?, addTagIds?, removeTagIds?}` |
 | Same for many | `POST /transactions/bulk` `{ids: [..], patch: {…same fields}}` |
 | Rows like this one (same merchant) | `GET /transactions/ID/similar`, then bulk |
-| A rule for the future (and existing rows) | `POST /rules` `{fromTransactionId: ID` or `pattern: "TEXT", setCategoryId?, setMemberId?, setBusinessId?, setKind?, tagIds?, applyToExisting: true}` → `{applied}`; `GET /rules`, `DELETE /rules/ID` |
+| A rule for the future (and existing rows) | `POST /rules` `{fromTransactionId: ID` or `pattern: "TEXT", setCategoryId?, setMemberId?, setBusinessId?, setKind?, setExcluded?: 1 (hide from the totals) / 0 (show again), tagIds?, applyToExisting: true}` → `{applied}`; `GET /rules`, `DELETE /rules/ID` |
 | Add a cash / paid-by-someone-else expense or income | `POST /transactions/manual` `{date, description, amount (positive), kind?: "expense"/"income", categoryId?, memberId?, tagIds?, notes?}`; edit `PUT /transactions/ID/manual`, delete `DELETE /transactions/ID` (manual rows only) |
 | A planned (expected) expense | `POST /planned` `{description, amount, date, accountId (the card / bank account that will be charged), installments?: 1-60, categoryId?, memberId?, tagIds?, notes?}`; `PUT /planned/ID`, `PATCH /planned/ID` `{status: "cancelled"/"planned", postponeMonths?}`, `DELETE /planned/ID` |
 | Categories | `POST /categories` `{name, parentId?}`; rename / move `PATCH /categories/ID` `{name?, parentId?}`; merge into another `DELETE /categories/ID?moveTo=ID` |

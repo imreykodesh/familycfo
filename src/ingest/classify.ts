@@ -27,6 +27,8 @@ export interface Rule {
   set_member_id: number | null;
   set_kind: string | null;
   set_tag_ids: string | null;
+  /** 1 = hide from the totals, 0 = show again, null = leave as is */
+  set_excluded?: number | null;
   priority: number;
 }
 
@@ -73,20 +75,27 @@ export function applyRules(db: DB, txIds: number[] | 'all', rules = loadRules(db
   const setKind = db.prepare(`UPDATE transactions SET kind = ?, kind_source = 'rule' WHERE id = ?`);
   const setBusiness = db.prepare(`UPDATE transactions SET business_id = ?, business_share_pct = ? WHERE id = ?`);
   const setMember = db.prepare(`UPDATE transactions SET member_id = ? WHERE id = ?`);
+  const setExcluded = db.prepare(`UPDATE transactions SET excluded = ? WHERE id = ?`);
   const addTag = db.prepare(`INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)`);
   const changed: number[] = [];
 
   db.transaction(() => {
     for (const tx of rows) {
-      const rule = rules.find(r => ruleMatches(r, tx));
-      if (!rule) continue;
-      if (rule.set_category_id && tx.category_source !== 'manual') setCategory.run(rule.set_category_id, tx.id);
-      if (rule.set_kind && tx.kind_source !== 'manual') setKind.run(rule.set_kind, tx.id);
-      if (rule.set_business_id && tx.business_id == null) {
-        setBusiness.run(rule.set_business_id, rule.set_business_share_pct ?? 100, tx.id);
+      const matching = rules.filter(r => ruleMatches(r, tx));
+      if (!matching.length) continue;
+      // each field from the first (highest-priority, newest) matching rule that sets it, so a rule that only
+      // hides a merchant doesn't cancel an older rule that gives it a category
+      const first = <K extends keyof Rule>(field: K) => matching.find(r => r[field] != null && r[field] !== '');
+      const category = first('set_category_id'), kind = first('set_kind'), business = first('set_business_id');
+      const member = first('set_member_id'), excluded = first('set_excluded');
+      if (category && tx.category_source !== 'manual') setCategory.run(category.set_category_id, tx.id);
+      if (kind && tx.kind_source !== 'manual') setKind.run(kind.set_kind, tx.id);
+      if (business && tx.business_id == null) {
+        setBusiness.run(business.set_business_id, business.set_business_share_pct ?? 100, tx.id);
       }
-      if (rule.set_member_id && tx.member_id == null) setMember.run(rule.set_member_id, tx.id);
-      for (const tagId of JSON.parse(rule.set_tag_ids || '[]') as number[]) addTag.run(tx.id, tagId);
+      if (member && tx.member_id == null) setMember.run(member.set_member_id, tx.id);
+      if (excluded) setExcluded.run(excluded.set_excluded ? 1 : 0, tx.id);
+      for (const r of matching) for (const tagId of JSON.parse(r.set_tag_ids || '[]') as number[]) addTag.run(tx.id, tagId);
       changed.push(tx.id);
     }
   })();

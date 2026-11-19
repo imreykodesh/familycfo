@@ -308,13 +308,15 @@ export function transactionRoutes(app: FastifyInstance, db: DB): void {
       set_member_id: body.setMemberId ?? null,
       set_kind: body.setKind ?? null,
       set_tag_ids: body.tagIds?.length ? JSON.stringify(body.tagIds) : null,
+      // hide the merchant's rows from the totals (1) or show them again (0)
+      set_excluded: body.setExcluded == null ? null : body.setExcluded ? 1 : 0,
       priority: body.priority ?? 10,
     };
     const id = Number(db.prepare(`
       INSERT INTO category_rules (match_type, pattern, account_id, min_amount, max_amount, set_category_id,
-        set_business_id, set_business_share_pct, set_member_id, set_kind, set_tag_ids, priority)
+        set_business_id, set_business_share_pct, set_member_id, set_kind, set_tag_ids, set_excluded, priority)
       VALUES (@match_type, @pattern, @account_id, @min_amount, @max_amount, @set_category_id,
-        @set_business_id, @set_business_share_pct, @set_member_id, @set_kind, @set_tag_ids, @priority)
+        @set_business_id, @set_business_share_pct, @set_member_id, @set_kind, @set_tag_ids, @set_excluded, @priority)
     `).run(values).lastInsertRowid);
     const applied = body.applyToExisting === false ? [] : applyRules(db, 'all');
     if (applied.length) deriveKinds(db, applied);

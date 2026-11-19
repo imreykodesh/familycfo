@@ -48,3 +48,20 @@ describe('manual entries', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe('"apply to similar" with "hide from the totals"', () => {
+  it('saves a rule that hides every row of the merchant, now and after the next scrape', async () => {
+    const db = testDb();
+    addAccount(db, 'discount:1', 'bank');
+    const app = Fastify();
+    transactionRoutes(app, db);
+    const ids = [1, 2, 3].map(m => addTx(db, { account: 'discount:1', date: `2026-0${m}-16`, description: "הפקדת מזומן לדיסקונט בכר' 2145", amount: 6000, kind: 'income' }));
+    await app.inject({ method: 'PATCH', url: `/api/transactions/${ids[0]}`, payload: { excluded: 1 } });
+    const res = await app.inject({ method: 'POST', url: '/api/rules', payload: { fromTransactionId: ids[0], setExcluded: 1 } });
+    expect(res.json().applied).toBe(3);
+    const excluded = () => db.prepare(`SELECT COUNT(*) FROM transactions WHERE excluded = 1`).pluck().get();
+    expect(excluded()).toBe(3);
+    const rules = (await app.inject({ method: 'GET', url: '/api/rules' })).json();
+    expect(rules[0].setExcluded).toBe(1);
+  });
+});

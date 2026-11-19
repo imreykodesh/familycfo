@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type AgentProvider, type Rule, type SyncStatus } from '../api';
 import { useLookups } from '../state';
-import { day } from '../format';
+import { day, KIND_LABELS } from '../format';
 import {
   BellRing, CalendarClock, Coins, KeyRound, Layers, Plus, RefreshCw, Settings2, SlidersHorizontal, Sparkles, Tags, Users, Wallet, Wand2, X,
 } from 'lucide-react';
@@ -157,7 +157,7 @@ export default function Settings() {
       <Section title="כללי סיווג" icon={Wand2} color="var(--chart-5)" subtitle="נוצרים כשבוחרים ״החל על תנועות דומות״. חלים על תנועות חדשות בכל סריקה.">
         {(rules.data ?? []).length === 0 ? <div className="text-sm text-zinc-500">אין כללים עדיין</div> : (
           <div className="scroll-x card-bleed"><table className="table">
-            <thead><tr><th>כשהתיאור</th><th>קטגוריה</th><th>עסק</th><th>שייך ל</th><th /></tr></thead>
+            <thead><tr><th>כשהתיאור</th><th>קטגוריה</th><th>עסק</th><th>שייך ל</th><th>עוד</th><th /></tr></thead>
             <tbody>
               {rules.data!.map(r => (
                 <tr key={r.id}>
@@ -165,6 +165,7 @@ export default function Settings() {
                   <td>{category(r.setCategoryId)?.name ?? '—'}</td>
                   <td>{meta.businesses.find(b => b.id === r.setBusinessId)?.name ?? '—'}{r.setBusinessSharePct && r.setBusinessSharePct !== 100 ? ` (${r.setBusinessSharePct}%)` : ''}</td>
                   <td>{meta.members.find(m => m.id === r.setMemberId)?.name ?? '—'}</td>
+                  <td>{[r.setKind ? KIND_LABELS[r.setKind] ?? r.setKind : null, r.setExcluded === 1 ? 'מוסתר מהחישובים' : r.setExcluded === 0 ? 'מוחזר לחישובים' : null].filter(Boolean).join(' · ') || '—'}</td>
                   <td><button className="btn-ghost text-rose-600 hover:text-rose-700 dark:text-rose-400" onClick={() => remove.mutate(`/rules/${r.id}`)}>מחק</button></td>
                 </tr>
               ))}

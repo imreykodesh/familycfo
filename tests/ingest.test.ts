@@ -169,6 +169,26 @@ describe('kinds, card bills and transfers', () => {
   });
 });
 
+describe('a rule that hides a merchant', () => {
+  it('hides the existing and future rows and keeps an older rule\'s category', () => {
+    const db = testDb();
+    addAccount(db, 'discount:1', 'bank');
+    const cash = Number(db.prepare(`INSERT INTO categories (name) VALUES ('כסף מזומן')`).run().lastInsertRowid);
+    db.prepare(`INSERT INTO category_rules (match_type, pattern, set_category_id, priority) VALUES ('contains', 'הפקדת מזומן', ?, 10)`).run(cash);
+    db.prepare(`INSERT INTO category_rules (match_type, pattern, set_excluded, priority) VALUES ('contains', 'הפקדת מזומן לדיסקונט בכר', 1, 10)`).run();
+    const old = addTx(db, { account: 'discount:1', date: '2026-10-16', description: "הפקדת מזומן לדיסקונט בכר' 2145", amount: 6000, kind: 'income' });
+    const other = addTx(db, { account: 'discount:1', date: '2026-10-16', description: 'משכורת', amount: 9000, kind: 'income' });
+    applyRules(db, 'all');
+    const row = (id: number) => db.prepare(`SELECT category_id, excluded FROM transactions WHERE id = ?`).get(id);
+    expect(row(old)).toEqual({ category_id: cash, excluded: 1 });
+    expect(row(other)).toEqual({ category_id: null, excluded: 0 });
+    // a new row of the same merchant, as after a scrape
+    const next = addTx(db, { account: 'discount:1', date: '2026-11-16', description: "הפקדת מזומן לדיסקונט בכר' 2145", amount: 6000, kind: 'income' });
+    applyRules(db, [next]);
+    expect(row(next)).toEqual({ category_id: cash, excluded: 1 });
+  });
+});
+
 describe('merged categories', () => {
   it('maps an old name from the categorizer to the category it was merged into', () => {
     const db = testDb();

@@ -799,6 +799,14 @@ export const migrations: Migration[] = [
         WHERE status = 'pending' AND charged_amount = 0 AND COALESCE(original_currency, 'ILS') = COALESCE(charged_currency, 'ILS')`);
     },
   },
+  {
+    version: 24,
+    name: 'rules can hide rows from the totals (and show them again)',
+    up(db) {
+      // 1 = hide the matching rows from every calculation, 0 = show them again, NULL = leave them as they are
+      db.exec(`ALTER TABLE category_rules ADD COLUMN set_excluded INTEGER`);
+    },
+  },
 ];
 
 type CategoryKind = 'expense' | 'income' | 'transfer' | 'card_payment' | 'savings';
