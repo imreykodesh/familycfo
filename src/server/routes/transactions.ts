@@ -312,7 +312,12 @@ export function transactionRoutes(app: FastifyInstance, db: DB): void {
       set_excluded: body.setExcluded == null ? null : body.setExcluded ? 1 : 0,
       priority: body.priority ?? 10,
     };
-    const id = Number(db.prepare(`
+    // the same rule again (a second click, or the same suggestion on another screen): keep the one that exists
+    const existing = db.prepare(`SELECT id FROM category_rules WHERE match_type = @match_type AND pattern = @pattern
+      AND account_id IS @account_id AND min_amount IS @min_amount AND max_amount IS @max_amount AND set_category_id IS @set_category_id
+      AND set_business_id IS @set_business_id AND set_business_share_pct IS @set_business_share_pct AND set_member_id IS @set_member_id
+      AND set_kind IS @set_kind AND set_tag_ids IS @set_tag_ids AND set_excluded IS @set_excluded`).pluck().get(values) as number | undefined;
+    const id = existing ?? Number(db.prepare(`
       INSERT INTO category_rules (match_type, pattern, account_id, min_amount, max_amount, set_category_id,
         set_business_id, set_business_share_pct, set_member_id, set_kind, set_tag_ids, set_excluded, priority)
       VALUES (@match_type, @pattern, @account_id, @min_amount, @max_amount, @set_category_id,

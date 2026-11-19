@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { healthReport, setIgnored } from '../src/analytics/health.js';
 import { healthRoutes } from '../src/server/routes/health.js';
+import { transactionRoutes } from '../src/server/routes/transactions.js';
 import { addAccount, addBalance, addTx, testDb } from './helpers.js';
 
 const AS_OF = '2026-11-17';
@@ -69,6 +70,23 @@ describe('health check', () => {
   it('a rule that covers the merchant removes the suggestion', () => {
     const { db } = setup();
     db.prepare(`INSERT INTO category_rules (match_type, pattern, set_category_id) VALUES ('contains', 'מאפיית', 1)`).run();
+    expect(healthReport(db, { asOf: AS_OF }).items.some(i => i.kind === 'rule')).toBe(false);
+  });
+
+  it('"create rule" on a description with numbers makes the suggestion go away, and a second click adds no second rule', async () => {
+    const db = testDb();
+    addAccount(db, 'discount:1', 'bank');
+    const pros = Number(db.prepare(`INSERT INTO categories (name) VALUES ('תשלום לבעלי מקצוע')`).run().lastInsertRowid);
+    for (const d of ['2026-07-01', '2026-08-01', '2026-09-01', '2026-10-01']) {
+      const id = addTx(db, { account: 'discount:1', date: d, description: 'העברה לישראל אליאס בנק 10 ל 10-856-0003704718', amount: -120, kind: 'expense', categoryId: pros });
+      db.prepare(`UPDATE transactions SET category_source = 'manual' WHERE id = ?`).run(id);
+    }
+    const rule = healthReport(db, { asOf: AS_OF }).items.find(i => i.kind === 'rule');
+    expect(rule?.actions?.[0]).toMatchObject({ method: 'POST', path: '/rules' });
+    const app = Fastify();
+    transactionRoutes(app, db);
+    for (let i = 0; i < 2; i++) await app.inject({ method: 'POST', url: '/api/rules', payload: rule!.actions![0].body });
+    expect(db.prepare(`SELECT pattern FROM category_rules`).pluck().all()).toEqual(['העברה לישראל אליאס בנק ל']);
     expect(healthReport(db, { asOf: AS_OF }).items.some(i => i.kind === 'rule')).toBe(false);
   });
 

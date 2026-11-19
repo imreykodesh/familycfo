@@ -6,6 +6,7 @@ import { explainScrapeError } from '../scrapeErrors.js';
 import { localDate } from '../ingest/normalize.js';
 import { addDays, daysBetween, getSetting, loadTransactions, today, type Tx } from './common.js';
 import { findDuplicateCharges } from './alerts.js';
+import { loadRules, ruleMatches } from '../ingest/classify.js';
 import { inferBillingAccounts } from './cards.js';
 import { bankBalances } from './forecast.js';
 
@@ -166,11 +167,10 @@ function nextMonth(m: string): string {
  * suggest a rule ("create" = POST /rules from one of its rows, applied to the existing rows too).
  */
 function ruleSuggestions(db: DB, txs: Tx[]): HealthItem[] {
-  const rules = db.prepare(`SELECT match_type, pattern FROM category_rules WHERE set_category_id IS NOT NULL`).all() as { match_type: string; pattern: string }[];
-  const covered = (description: string) => {
-    const d = description.trim().toLowerCase();
-    return rules.some(r => (r.match_type === 'exact' ? d === r.pattern.trim().toLowerCase() : d.includes(r.pattern.trim().toLowerCase())));
-  };
+  const rules = loadRules(db).filter(r => r.set_category_id != null);
+  // the same test the rules themselves use: a rule saved from a row is its merchant key (no numbers), which the raw
+  // description ("העברה לישראל אליאס בנק 10 ל 10-856-…") doesn't contain
+  const covered = (t: Tx) => rules.some(r => ruleMatches(r, { description: t.description, account_id: t.accountId, charged_amount: t.amount }));
   const byMerchant = new Map<string, Tx[]>();
   for (const t of txs) if (t.categorySource === 'manual' && t.categoryId != null && t.merchant) {
     byMerchant.set(t.merchant, [...(byMerchant.get(t.merchant) ?? []), t]);
@@ -180,7 +180,7 @@ function ruleSuggestions(db: DB, txs: Tx[]): HealthItem[] {
     const categories = new Set(rows.map(t => t.categoryId));
     if (rows.length < RULE_MIN_MANUAL || categories.size !== 1) continue;
     const sample = rows.at(-1)!;
-    if (covered(sample.description)) continue;
+    if (covered(sample)) continue;
     // rows of the same merchant that still have another category (or none) would change when the rule is applied
     const others = txs.filter(t => t.merchant === merchant && t.categoryId !== sample.categoryId && t.categorySource !== 'manual').length;
     items.push({

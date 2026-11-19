@@ -807,6 +807,16 @@ export const migrations: Migration[] = [
       db.exec(`ALTER TABLE category_rules ADD COLUMN set_excluded INTEGER`);
     },
   },
+  {
+    version: 25,
+    name: 'remove rules saved twice (the same rule created by clicking again)',
+    up(db) {
+      db.exec(`DELETE FROM category_rules WHERE id NOT IN (
+        SELECT MIN(id) FROM category_rules
+        GROUP BY match_type, pattern, account_id, min_amount, max_amount, set_category_id, set_business_id,
+          set_business_share_pct, set_member_id, set_kind, set_tag_ids, set_excluded, priority)`);
+    },
+  },
 ];
 
 type CategoryKind = 'expense' | 'income' | 'transfer' | 'card_payment' | 'savings';
